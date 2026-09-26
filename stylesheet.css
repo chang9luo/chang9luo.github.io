@@ -434,4 +434,31 @@ name ruby rt {
   .news-meta { font-size: 12px; }
   heading { font-size: 22px; }
   .topbar { top: 8px; right: 8px; }
+
+  /* publication cards read as separate boxes: alternating faint tint,
+     rounded corners, a little air between them */
+  tr:has(> td[style*="width:25%"]) {
+    border-radius: 12px;
+    margin: 10px 0;
+    padding: 4px 0 6px;
+    background: var(--card-alt, rgba(0, 0, 0, 0.035));
+  }
+  tr:has(> td[style*="width:25%"]):nth-child(even) {
+    background: var(--card-alt2, rgba(0, 0, 0, 0.075));
+  }
+
+  /* news items separated by a hairline */
+  .news-item { padding: 8px 0; margin-top: 0; border-top: 1px solid var(--divider, rgba(0, 0, 0, 0.12)); }
+  .news-item:first-child { border-top: none; padding-top: 0; }
+}
+
+:root {
+  --card-alt: rgba(0, 0, 0, 0.035);
+  --card-alt2: rgba(0, 0, 0, 0.075);
+  --divider: rgba(0, 0, 0, 0.12);
+}
+:root[data-theme="dark"] {
+  --card-alt: rgba(255, 255, 255, 0.04);
+  --card-alt2: rgba(255, 255, 255, 0.085);
+  --divider: rgba(255, 255, 255, 0.14);
 }
