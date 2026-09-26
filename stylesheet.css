@@ -441,10 +441,10 @@ name ruby rt {
     border-radius: 12px;
     margin: 10px 0;
     padding: 4px 0 6px;
-    background: var(--card-alt, rgba(0, 0, 0, 0.035));
+    background: transparent;                 /* odd cards: no background */
   }
   tr:has(> td[style*="width:25%"]):nth-child(even) {
-    background: var(--card-alt2, rgba(0, 0, 0, 0.075));
+    background: var(--card-alt, rgba(0, 0, 0, 0.03));   /* even cards: a barely-there tint */
   }
 
   /* news items separated by a hairline */
@@ -453,12 +453,10 @@ name ruby rt {
 }
 
 :root {
-  --card-alt: rgba(0, 0, 0, 0.035);
-  --card-alt2: rgba(0, 0, 0, 0.075);
+  --card-alt: rgba(0, 0, 0, 0.03);
   --divider: rgba(0, 0, 0, 0.12);
 }
 :root[data-theme="dark"] {
-  --card-alt: rgba(255, 255, 255, 0.04);
-  --card-alt2: rgba(255, 255, 255, 0.085);
+  --card-alt: rgba(255, 255, 255, 0.035);
   --divider: rgba(255, 255, 255, 0.14);
 }
