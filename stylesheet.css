@@ -453,7 +453,7 @@ name ruby rt {
 }
 
 :root {
-  --card-alt: rgba(0, 0, 0, 0.03);
+  --card-alt: rgba(0, 0, 0, 0.015);
   --divider: rgba(0, 0, 0, 0.12);
 }
 :root[data-theme="dark"] {
