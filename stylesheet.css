@@ -435,22 +435,20 @@ name ruby rt {
   heading { font-size: 22px; }
   .topbar { top: 8px; right: 8px; }
 
-  /* publication cards read as separate boxes: alternating faint tint,
-     rounded corners, a little air between them */
-  tr:has(> td[style*="width:25%"]) {
-    border-radius: 12px;
-    margin: 10px 0;
-    padding: 4px 0 6px;
-    background: transparent;                 /* odd cards: no background */
-  }
-  tr:has(> td[style*="width:25%"]):nth-child(even) {
-    background: var(--card-alt, rgba(0, 0, 0, 0.03));   /* even cards: a barely-there tint */
-  }
-
-  /* news items separated by a hairline */
-  .news-item { padding: 8px 0; margin-top: 0; border-top: 1px solid var(--divider, rgba(0, 0, 0, 0.12)); }
-  .news-item:first-child { border-top: none; padding-top: 0; }
+  /* stacked cards: the tint (set below for all widths) wraps top and bottom */
+  tr:has(> td[style*="width:25%"]) { margin: 10px 0; padding: 4px 0 6px; }
+  tr:has(> td[style*="width:25%"]) > td:first-child { border-radius: 12px 12px 0 0 !important; }
+  tr:has(> td[style*="width:25%"]) > td:last-child { border-radius: 0 0 12px 12px !important; }
 }
+
+/* ---- All widths: every second publication card gets a barely-there tint,
+   news items are separated by a hairline ---- */
+tr:has(> td[style*="width:25%"]):nth-child(even) > td { background: var(--card-alt, rgba(0, 0, 0, 0.015)); }
+tr:has(> td[style*="width:25%"]) > td:first-child { border-radius: 12px 0 0 12px; }
+tr:has(> td[style*="width:25%"]) > td:last-child { border-radius: 0 12px 12px 0; }
+
+.news-item { padding: 8px 0; margin-top: 0; border-top: 1px solid var(--divider, rgba(0, 0, 0, 0.12)); }
+.news-item:first-child { border-top: none; padding-top: 0; }
 
 :root {
   --card-alt: rgba(0, 0, 0, 0.015);
