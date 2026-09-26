@@ -364,6 +364,13 @@ name ruby rt {
   background: rgba(127, 127, 127, 0.15);
 }
 
+.photo-preview.doc img {
+  width: auto;           /* a document page: keep its own aspect, no cropping */
+  height: 190px;
+  object-fit: contain;
+  cursor: pointer;
+}
+
 .photo-lightbox {
   position: fixed;
   inset: 0;

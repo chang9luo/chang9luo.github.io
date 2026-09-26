@@ -17,6 +17,7 @@
       preview.addEventListener('mouseleave', hidePreview);
     }
     preview.innerHTML = '';
+    preview.classList.remove('doc');
     photosOf(link).forEach(function (src, i) {
       var img = document.createElement('img');
       img.src = src; img.alt = 'photo ' + (i + 1);
@@ -78,7 +79,37 @@
   function step(d) { index = (index + d + current.length) % current.length; render(); }
   function closeLightbox() { box.style.display = 'none'; document.body.style.overflow = ''; }
 
+  // ---- single-image hover preview for slide / poster links ----
+  function showDocPreview(link) {
+    if (!preview) {
+      preview = document.createElement('div');
+      preview.className = 'photo-preview';
+      document.body.appendChild(preview);
+      preview.addEventListener('mouseenter', function () { clearTimeout(hideTimer); });
+      preview.addEventListener('mouseleave', hidePreview);
+    }
+    preview.innerHTML = '';
+    preview.classList.add('doc');
+    var img = document.createElement('img');
+    img.src = link.getAttribute('data-preview'); img.alt = 'preview';
+    img.addEventListener('click', function () { hidePreview(true); window.open(link.href, '_blank', 'noopener'); });
+    preview.appendChild(img);
+    var r = link.getBoundingClientRect();
+    preview.style.display = 'flex';
+    var w = preview.offsetWidth;
+    var left = r.left + window.scrollX;
+    var maxLeft = window.scrollX + document.documentElement.clientWidth - w - 8;
+    if (left > maxLeft) left = Math.max(8, maxLeft);
+    preview.style.left = left + 'px';
+    preview.style.top = (r.bottom + window.scrollY + 8) + 'px';
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('a.pdf-link[data-preview]').forEach(function (link) {
+      link.addEventListener('mouseenter', function () { clearTimeout(hideTimer); showDocPreview(link); });
+      link.addEventListener('mouseleave', hidePreview);
+      link.addEventListener('click', function () { hidePreview(true); });
+    });
     document.querySelectorAll('a.photo-link').forEach(function (link) {
       link.addEventListener('mouseenter', function () { clearTimeout(hideTimer); showPreview(link); });
       link.addEventListener('mouseleave', hidePreview);

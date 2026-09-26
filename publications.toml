@@ -72,8 +72,6 @@ arxiv   = "https://arxiv.org/abs/2609.06950"
 website = "./CT2Yarn/"
 code    = "https://github.com/chang9luo/ct2yarn"
 video   = "https://www.youtube.com/watch?v=CWyazq2m4Yo"
-slides  = "data/PG2026_CT2Yarn_slides.pdf"
-poster  = "data/PG2026_CT2Yarn_poster.pdf"
 data    = "https://doi.org/10.5281/zenodo.22822228"
 
 [[publications]]
