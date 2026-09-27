@@ -104,7 +104,18 @@
     preview.style.top = (r.bottom + window.scrollY + 8) + 'px';
   }
 
+  // Preload every preview and gallery image right after the page is up, so
+  // the first hover shows the picture instantly instead of an empty box.
+  var cache = [];
+  function preload() {
+    var urls = [];
+    document.querySelectorAll('a.pdf-link[data-preview]').forEach(function (l) { urls.push(l.getAttribute('data-preview')); });
+    document.querySelectorAll('a.photo-link').forEach(function (l) { urls = urls.concat(photosOf(l)); });
+    urls.forEach(function (u) { var im = new Image(); im.decoding = 'async'; im.src = u; cache.push(im); });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
+    if (window.requestIdleCallback) { requestIdleCallback(preload); } else { setTimeout(preload, 200); }
     document.querySelectorAll('a.pdf-link[data-preview]').forEach(function (link) {
       link.addEventListener('mouseenter', function () { clearTimeout(hideTimer); showDocPreview(link); });
       link.addEventListener('mouseleave', hidePreview);
