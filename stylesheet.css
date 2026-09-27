@@ -355,8 +355,8 @@ name ruby rt {
 }
 
 .photo-preview img {
-  height: 120px;
-  width: 160px;          /* fixed box: the strip's size is known before the images load */
+  height: 190px;         /* same height as the slide / poster previews */
+  width: 253px;          /* fixed 4:3 box: the strip's size is known before the images load */
   object-fit: cover;
   border-radius: 6px;
   cursor: zoom-in;
