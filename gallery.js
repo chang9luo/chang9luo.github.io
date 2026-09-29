@@ -24,21 +24,30 @@
       img.addEventListener('click', function () { hidePreview(true); openLightbox(link, i); });
       preview.appendChild(img);
     });
-    // Fixed placement: the strip's left edge sits on the link's left edge,
-    // 8px below it.  The thumbnails have a fixed CSS size, so the strip has
-    // the same width before and after the images load and never shifts.
-    var r = link.getBoundingClientRect();
-    preview.style.display = 'flex';
-    var w = preview.offsetWidth;
-    var left = r.left + window.scrollX;
-    var maxLeft = window.scrollX + document.documentElement.clientWidth - w - 8;
-    if (left > maxLeft) left = Math.max(8, maxLeft);
-    preview.style.left = left + 'px';
-    preview.style.top = (r.bottom + window.scrollY + 8) + 'px';
+    // The thumbnails have a fixed CSS size, so the strip has the same width
+    // before and after the images load and never shifts.
+    placePreview(link);
   }
   function hidePreview(now) {
     clearTimeout(hideTimer);
     hideTimer = setTimeout(function () { if (preview) preview.style.display = 'none'; }, now === true ? 0 : 180);
+  }
+  // The box's left edge sits on the link's left edge, 8px below it.  If that
+  // would push its right edge past the screen, it slides left just until the
+  // right edge meets the screen's right edge.  It is never wider than the
+  // screen (a longer photo strip scrolls sideways), so it can never widen the
+  // page, which on phones would zoom the whole page out.
+  function placePreview(link) {
+    var vw = document.documentElement.clientWidth;
+    // measure at the far left: an absolute box's width depends on how much
+    // room is left to its right, so it must be measured before it is moved
+    preview.style.left = '0px';
+    preview.style.maxWidth = vw + 'px';
+    preview.style.display = 'flex';
+    var w = preview.offsetWidth;
+    var r = link.getBoundingClientRect();
+    preview.style.left = (window.scrollX + Math.min(r.left, vw - w)) + 'px';
+    preview.style.top = (r.bottom + window.scrollY + 8) + 'px';
   }
 
   // ---- lightbox ----
@@ -58,6 +67,19 @@
       box.querySelector('.lb-prev').addEventListener('click', function (e) { e.stopPropagation(); step(-1); });
       box.querySelector('.lb-next').addEventListener('click', function (e) { e.stopPropagation(); step(1); });
       box.addEventListener('click', function (e) { if (e.target === box) closeLightbox(); });
+      // phones: swipe sideways for the next / previous photo, down to close.
+      // A two-finger pinch (zooming in on a photo) is not a swipe.
+      var sx = 0, sy = 0, pinch = false;
+      box.addEventListener('touchstart', function (e) {
+        if (e.touches.length > 1) { pinch = true; return; }
+        pinch = false; sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+      }, { passive: true });
+      box.addEventListener('touchend', function (e) {
+        if (pinch || e.touches.length) return;
+        var dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+        if (Math.abs(dx) > 40 && Math.abs(dx) > 1.5 * Math.abs(dy)) { if (current.length > 1) step(dx < 0 ? 1 : -1); }
+        else if (dy > 80 && dy > 1.5 * Math.abs(dx)) closeLightbox();
+      });
       document.addEventListener('keydown', function (e) {
         if (!box || box.style.display !== 'flex') return;
         if (e.key === 'Escape') closeLightbox();
@@ -93,15 +115,11 @@
     var img = document.createElement('img');
     img.src = link.getAttribute('data-preview'); img.alt = 'preview';
     img.addEventListener('click', function () { hidePreview(true); window.open(link.href, '_blank', 'noopener'); });
+    // the page's width is only known once it has loaded: if it was not in the
+    // cache yet, place the box again then, or a wide slide could stick out
+    img.addEventListener('load', function () { if (img.parentNode === preview && preview.style.display !== 'none') placePreview(link); });
     preview.appendChild(img);
-    var r = link.getBoundingClientRect();
-    preview.style.display = 'flex';
-    var w = preview.offsetWidth;
-    var left = r.left + window.scrollX;
-    var maxLeft = window.scrollX + document.documentElement.clientWidth - w - 8;
-    if (left > maxLeft) left = Math.max(8, maxLeft);
-    preview.style.left = left + 'px';
-    preview.style.top = (r.bottom + window.scrollY + 8) + 'px';
+    placePreview(link);
   }
 
   // Preload every preview and gallery image right after the page is up, so

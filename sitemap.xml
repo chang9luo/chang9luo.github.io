@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Every page of the site.  The two homepages are one page in two languages:
+     each lists both, so search engines show the right one per language.
+     Add a <url> here when a new project page goes up. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://chang9luo.github.io/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://chang9luo.github.io/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://chang9luo.github.io/index-ja.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chang9luo.github.io/"/>
+  </url>
+  <url>
+    <loc>https://chang9luo.github.io/index-ja.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://chang9luo.github.io/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://chang9luo.github.io/index-ja.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chang9luo.github.io/"/>
+  </url>
+  <url>
+    <loc>https://chang9luo.github.io/LeafFit/</loc>
+  </url>
+  <url>
+    <loc>https://chang9luo.github.io/CT2Yarn/</loc>
+  </url>
+</urlset>

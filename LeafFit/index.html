@@ -1,25 +1,93 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="description"
-            content="LeafFit: Plant Assets Creation from 3D Gaussian Splatting.">
+            content="LeafFit (Eurographics 2026) converts 3D Gaussian Splatting of plants into editable, instanced mesh assets by fitting a template leaf mesh to every leaf with differentiable MLS deformation.">
   <meta name="keywords" content="Plant Assets, 3D Gaussian Splatting, LeafFit, Computer Graphics">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>🌿 LeafFit: Plant Assets Creation from 3D Gaussian Splatting</title>
+  <link rel="canonical" href="https://chang9luo.github.io/LeafFit/">
+  <link rel="icon" href="./static/images/favicon.svg">
+  <!-- link previews when the page is shared (Open Graph, X) -->
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Chang Luo">
+  <meta property="og:title" content="LeafFit: Plant Assets Creation from 3D Gaussian Splatting">
+  <meta property="og:description" content="Converts 3D Gaussian Splatting of plants into editable, instanced mesh assets. Eurographics 2026 / Computer Graphics Forum.">
+  <meta property="og:url" content="https://chang9luo.github.io/LeafFit/">
+  <meta property="og:image" content="https://chang9luo.github.io/LeafFit/static/images/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="LeafFit teaser">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@chang9luo">
+  <!-- the paper, for Google Scholar (Highwire Press tags) -->
+  <meta name="citation_title" content="LeafFit: Plant Assets Creation from 3D Gaussian Splatting">
+  <meta name="citation_author" content="Luo, Chang">
+  <meta name="citation_author_institution" content="The University of Tokyo">
+  <meta name="citation_author" content="Umetani, Nobuyuki">
+  <meta name="citation_author_institution" content="The University of Tokyo">
+  <meta name="citation_publication_date" content="2026">
+  <meta name="citation_journal_title" content="Computer Graphics Forum">
+  <meta name="citation_publisher" content="Wiley">
+  <meta name="citation_firstpage" content="e70374">
+  <meta name="citation_doi" content="10.1111/cgf.70374">
+  <meta name="citation_pdf_url" content="https://chang9luo.github.io/data/LeafFit.pdf">
+  <!-- the paper, for search engines -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "ScholarlyArticle",
+    "headline": "LeafFit: Plant Assets Creation from 3D Gaussian Splatting",
+    "description": "LeafFit (Eurographics 2026) converts 3D Gaussian Splatting of plants into editable, instanced mesh assets by fitting a template leaf mesh to every leaf with differentiable MLS deformation.",
+    "url": "https://chang9luo.github.io/LeafFit/",
+    "image": "https://chang9luo.github.io/LeafFit/static/images/og.jpg",
+    "datePublished": "2026",
+    "author": [
+      {
+        "@type": "Person",
+        "name": "Chang Luo",
+        "url": "https://chang9luo.github.io/",
+        "affiliation": {
+          "@type": "CollegeOrUniversity",
+          "name": "The University of Tokyo"
+        }
+      },
+      {
+        "@type": "Person",
+        "name": "Nobuyuki Umetani",
+        "url": "https://cgenglab.github.io/en/authors/admin/",
+        "affiliation": {
+          "@type": "CollegeOrUniversity",
+          "name": "The University of Tokyo"
+        }
+      }
+    ],
+    "isPartOf": {
+      "@type": "Periodical",
+      "name": "Computer Graphics Forum"
+    },
+    "identifier": {
+      "@type": "PropertyValue",
+      "propertyID": "DOI",
+      "value": "10.1111/cgf.70374"
+    },
+    "sameAs": [
+      "https://doi.org/10.1111/cgf.70374",
+      "https://arxiv.org/abs/2602.11577"
+    ]
+  }
+  </script>
 
-  <!-- Global site tag (gtag.js) - Google Analytics -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-PYVRSFMDRL"></script>
+  <!-- Google Analytics: GA4 stream "academic" (G-XSPNQ3JDCY). Switched off anywhere but the
+       published site, so local previews are not counted. -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-XSPNQ3JDCY"></script>
   <script>
+    if (location.hostname !== 'chang9luo.github.io') window['ga-disable-G-XSPNQ3JDCY'] = true;
     window.dataLayer = window.dataLayer || [];
-
-    function gtag() {
-      dataLayer.push(arguments);
-    }
-
+    function gtag() { dataLayer.push(arguments); }
     gtag('js', new Date());
-
-    gtag('config', 'G-PYVRSFMDRL');
+    gtag('config', 'G-XSPNQ3JDCY');
   </script>
 
   <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
@@ -806,6 +874,10 @@
 <section class="section" id="BibTeX">
   <div class="container is-max-desktop content">
     <h2 class="title">BibTeX</h2>
+    <div style="position: relative;">
+      <button class="button is-small bibtex-copy" type="button" style="position: absolute; top: 0.75em; right: 0.75em;">
+        <span class="icon"><i class="far fa-copy"></i></span><span class="bibtex-copy-label">Copy</span>
+      </button>
     <pre><code>
 @article{leaffit_luo25,
     author = {Luo, Chang and Umetani, Nobuyuki},
@@ -820,6 +892,7 @@
     eprint = {https://onlinelibrary.wiley.com/doi/pdf/10.1111/cgf.70374}
 }  
     </code></pre>
+    </div>
   </div>
 </section>
 
@@ -836,6 +909,30 @@
   </div>
 </section>
 
+
+<script>
+// "Copy" on the BibTeX block: puts the entry on the clipboard, then says so for a moment.
+document.querySelectorAll('.bibtex-copy').forEach(function (btn) {
+  var label = btn.querySelector('.bibtex-copy-label');
+  var text = btn.parentNode.querySelector('code').textContent.trim() + '\n';
+  function done(ok) {
+    label.textContent = ok ? 'Copied!' : 'Copy failed';
+    setTimeout(function () { label.textContent = 'Copy'; }, 1500);
+  }
+  function fallback() {   // older browsers, and pages not served over https
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) {}
+    ta.remove(); done(ok);
+  }
+  btn.addEventListener('click', function () {
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+    else fallback();
+  });
+});
+</script>
 
 </body>
 </html>

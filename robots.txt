@@ -1,0 +1,10 @@
+# https://chang9luo.github.io/robots.txt
+# Everything public here is meant to be found, including the paper PDFs in
+# /data/ (Google Scholar indexes them through the project pages' citation tags).
+# Only the site's build scripts are kept out of search results.
+
+User-agent: *
+Allow: /
+Disallow: /scripts/
+
+Sitemap: https://chang9luo.github.io/sitemap.xml

@@ -7,7 +7,10 @@
   var stored = null;
   try { stored = localStorage.getItem('lang'); } catch (e) {}
   var wanted = stored || (((navigator.language || navigator.userLanguage || '').toLowerCase().indexOf('ja') === 0) ? 'ja' : 'en');
-  if (wanted !== pageLang) {
+  // Search engines must see each language at its own URL (they find the other
+  // one through the hreflang links), so crawlers are never redirected.
+  var crawler = /bot|crawl|spider|slurp/i.test(navigator.userAgent || '');
+  if (wanted !== pageLang && !crawler) {
     var target = wanted === 'ja' ? 'index-ja.html' : 'index.html';
     location.replace(target + location.search + location.hash);
     return;

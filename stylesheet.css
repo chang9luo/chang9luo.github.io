@@ -352,9 +352,13 @@ name ruby rt {
   background: var(--btn-bg, #fff);
   border: 1px solid var(--btn-border, #ddd);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  box-sizing: border-box;  /* the max-width gallery.js sets is the whole box, border included */
+  overflow-x: auto;        /* a strip wider than the screen scrolls sideways instead of widening the page */
 }
 
 .photo-preview img {
+  flex: none;            /* never squeezed: a long strip scrolls instead */
+  max-width: none;       /* not the phones' img { max-width: 100% } rule either */
   height: 190px;         /* same height as the slide / poster previews */
   width: 253px;          /* fixed 4:3 box: the strip's size is known before the images load */
   object-fit: cover;
