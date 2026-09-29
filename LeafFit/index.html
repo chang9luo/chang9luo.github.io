@@ -873,11 +873,12 @@
 
 <section class="section" id="BibTeX">
   <div class="container is-max-desktop content">
-    <h2 class="title">BibTeX</h2>
-    <div style="position: relative;">
-      <button class="button is-small bibtex-copy" type="button" style="position: absolute; top: 0.75em; right: 0.75em;">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 1rem;">
+      <h2 class="title" style="margin: 0;">BibTeX</h2>
+      <button class="button is-small bibtex-copy" type="button">
         <span class="icon"><i class="far fa-copy"></i></span><span class="bibtex-copy-label">Copy</span>
       </button>
+    </div>
     <pre><code>
 @article{leaffit_luo25,
     author = {Luo, Chang and Umetani, Nobuyuki},
@@ -892,7 +893,6 @@
     eprint = {https://onlinelibrary.wiley.com/doi/pdf/10.1111/cgf.70374}
 }  
     </code></pre>
-    </div>
   </div>
 </section>
 
@@ -914,7 +914,7 @@
 // "Copy" on the BibTeX block: puts the entry on the clipboard, then says so for a moment.
 document.querySelectorAll('.bibtex-copy').forEach(function (btn) {
   var label = btn.querySelector('.bibtex-copy-label');
-  var text = btn.parentNode.querySelector('code').textContent.trim() + '\n';
+  var text = btn.closest('section').querySelector('code').textContent.trim() + '\n';
   function done(ok) {
     label.textContent = ok ? 'Copied!' : 'Copy failed';
     setTimeout(function () { label.textContent = 'Copy'; }, 1500);

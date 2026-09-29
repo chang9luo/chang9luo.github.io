@@ -1,8 +1,11 @@
 // Realtime viewers for the reconstruction comparison table.
 //
-// Each cell holds one <canvas>. A cell only builds its WebGL context when it
-// first scrolls into view, because a browser caps how many live contexts it
-// will keep and this page asks for fourteen of them.
+// Each cell holds one <canvas>. A browser caps how many live WebGL contexts a
+// page may keep (phones drop the oldest one without warning), and this page
+// has fourteen cells. So a cell builds its context only when it scrolls into
+// view, draws only while it is on screen, and at most MAX_LIVE contexts are
+// kept: past that, the one scrolled out of view longest ago is released and
+// rebuilt if the visitor comes back to it.
 //
 // Geometry arrives as a flat Float32Array of xyz, already centred and scaled
 // into a unit box, plus the offsets that split it back into separate curves.
@@ -53,8 +56,19 @@ function tube(points, colour, radius) {
     { vertexColors: true, roughness: 0.5, metalness: 0.0 }));
 }
 
+const MAX_LIVE = 8;
+
+// each curve file is fetched once, even when its cell is rebuilt
+const buffers = {};
+function load(url) {
+  return buffers[url] || (buffers[url] = fetch(url).then(r => {
+    if (!r.ok) throw new Error(url + ': HTTP ' + r.status);
+    return r.arrayBuffer();
+  }));
+}
+
 async function build(canvas, spec, base) {
-  const buf = await (await fetch(base + spec.file)).arrayBuffer();
+  const buf = await load(base + spec.file);
   const xyz = new Float32Array(buf);
   const offs = spec.offsets;
 
@@ -161,86 +175,153 @@ async function build(canvas, spec, base) {
     canvas.dispatchEvent(new CustomEvent('cv-grab', { bubbles: true }));
   });
 
+  // Compare against the last CSS size, not canvas.width: on a high-density
+  // screen the drawing buffer is larger than the CSS box, so that test never
+  // matched and the buffer was reallocated on every frame.
+  let lastW = 0, lastH = 0;
   function size() {
     const w = canvas.clientWidth, h = canvas.clientHeight;
-    if (canvas.width !== w || canvas.height !== h) {
+    if (w !== lastW || h !== lastH) {
+      lastW = w; lastH = h;
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
     }
   }
-  let alive = true;
-  (function loop() {
-    if (!alive) return;
+  // Draw only while the cell is on screen; fourteen turntables spinning out
+  // of sight would keep a phone's GPU busy for nothing.
+  let alive = true, visible = true, running = false;
+  function loop() {
+    if (!alive || !visible) { running = false; return; }
+    running = true;
     requestAnimationFrame(loop);
     size();
     controls.update();
     renderer.render(scene, camera);
-  })();
-  return { camera, controls, dispose: () => { alive = false; renderer.dispose(); } };
+  }
+  loop();
+
+  const view = {
+    camera, controls, canvas,
+    lost: null,                          // set by the caller: the browser dropped this context
+    setVisible(v) { visible = v; if (v && alive && !running) loop(); },
+    dispose() {
+      alive = false;
+      controls.dispose();
+      scene.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+      });
+      renderer.dispose();
+      try { renderer.forceContextLoss(); } catch (_) {}   // hand the context back now
+    },
+  };
+  // A phone can still take a context back on its own (memory pressure, a GPU
+  // reset). Tell the caller, which releases the cell and rebuilds it on view.
+  canvas.addEventListener('webglcontextlost', e => {
+    if (!alive) return;                  // our own release, already handled
+    e.preventDefault();
+    alive = false;
+    if (view.lost) view.lost();
+  });
+  return view;
 }
 
 // The two cells of one row show the same piece, so a visitor turning one
-// expects the other to follow. Mirror the camera both ways, guarding against
-// the echo that copying back would otherwise cause.
-function link(views) {
-  if (views.length < 2) return;
-  let echo = false;
-  views.forEach(v => {
-    v.controls.addEventListener('change', () => {
-      // autoRotate fires 'change' every frame. Both cells spin at the same rate
-      // from the same pose, so copying then is pure overhead and can fight the
-      // damping. Only mirror once a visitor has actually taken hold.
-      if (echo || v.controls.autoRotate) return;
-      echo = true;
-      views.forEach(o => {
-        if (o === v) return;
-        o.camera.position.copy(v.camera.position);
-        o.camera.quaternion.copy(v.camera.quaternion);
-        o.camera.zoom = v.camera.zoom;
-        o.camera.updateProjectionMatrix();
-        o.controls.target.copy(v.controls.target);
-        o.controls.update();
-      });
-      echo = false;
+// expects the other to follow. Each view mirrors its camera to whichever
+// mates are live at the time, guarded against the echo that copying back
+// would otherwise cause.
+const pairs = {};                        // stem -> Set of live views
+const echoing = {};                      // stem -> true while mirroring
+function link(stem, view) {
+  const mates = pairs[stem] = pairs[stem] || new Set();
+  mates.add(view);
+  view.controls.addEventListener('change', () => {
+    // autoRotate fires 'change' every frame. Both cells spin at the same rate
+    // from the same pose, so copying then is pure overhead and can fight the
+    // damping. Only mirror once a visitor has actually taken hold.
+    if (echoing[stem] || view.controls.autoRotate) return;
+    echoing[stem] = true;
+    mates.forEach(o => {
+      if (o === view) return;
+      o.camera.position.copy(view.camera.position);
+      o.camera.quaternion.copy(view.camera.quaternion);
+      o.camera.zoom = view.camera.zoom;
+      o.camera.updateProjectionMatrix();
+      o.controls.target.copy(view.controls.target);
+      o.controls.update();
     });
+    echoing[stem] = false;
   });
 }
 
 export function initCurveViewers(manifestUrl, base) {
-  const pairs = {};
   fetch(manifestUrl).then(r => r.json()).then(manifest => {
-    const io = new IntersectionObserver((entries, obs) => {
+    let clock = 0;                       // orders cells by when they were last on screen
+    const cells = [...document.querySelectorAll('.cv-cell')].map(el => {
+      const stem = el.dataset.stem;
+      const spec = manifest[stem][el.dataset.view];
+      const count = el.querySelector('.cv-count');
+      if (count) count.textContent = spec.n_curves === 1 ? '1 curve' : spec.n_curves + ' curves';
+      const mates = () => document.querySelectorAll('.cv-cell[data-stem="' + stem + '"]');
+      el.addEventListener('pointerenter', () => mates().forEach(c => c.classList.add('cv-hi')));
+      el.addEventListener('pointerleave', () => mates().forEach(c => c.classList.remove('cv-hi')));
+      el.addEventListener('cv-grab', () => {
+        document.querySelectorAll('.cmp-cell[data-stem="' + stem + '"]')
+          .forEach(c => c.classList.add('cv-touched'));
+      });
+      return { el, stem, spec, view: null, building: false, visible: false, seen: 0,
+               note: el.querySelector('.cv-loading') };
+    });
+    const byEl = new Map(cells.map(c => [c.el, c]));
+
+    function release(c) {
+      pairs[c.stem].delete(c.view);
+      c.view.dispose();
+      c.view = null;
+      delete c.el.dataset.live;
+      // a canvas whose context was lost cannot get a new one: swap in a fresh
+      // canvas for the next build
+      const old = c.el.querySelector('canvas');
+      old.replaceWith(old.cloneNode(false));
+      if (c.note) { c.note.textContent = 'loading'; c.note.style.display = ''; }
+    }
+
+    function trim() {
+      const live = cells.filter(c => c.view);
+      const spare = live.filter(c => !c.visible).sort((a, b) => a.seen - b.seen);
+      for (let extra = live.length - MAX_LIVE; extra > 0 && spare.length; extra--) release(spare.shift());
+    }
+
+    function show(c) {
+      if (c.view) { c.view.setVisible(true); return; }
+      if (c.building) return;
+      c.building = true;
+      build(c.el.querySelector('canvas'), c.spec, base).then(view => {
+        c.building = false;
+        c.view = view;
+        c.el.dataset.live = '';
+        if (c.note) c.note.style.display = 'none';
+        view.lost = () => { if (c.view === view) { release(c); if (c.visible) show(c); } };
+        link(c.stem, view);
+        view.setVisible(c.visible);
+        trim();
+      }).catch(err => {
+        c.building = false;
+        if (c.note) c.note.textContent = 'failed to load';
+        console.error(err);
+      });
+    }
+
+    const io = new IntersectionObserver(entries => {
       entries.forEach(e => {
-        if (!e.isIntersecting) return;
-        const el = e.target;
-        obs.unobserve(el);
-        const spec = manifest[el.dataset.stem][el.dataset.view];
-        const canvas = el.querySelector('canvas');
-        const note = el.querySelector('.cv-loading');
-        const count = el.querySelector('.cv-count');
-        if (count) {
-          const n = spec.n_curves;
-          count.textContent = n === 1 ? '1 curve' : n + ' curves';
-        }
-        const mates = () => document.querySelectorAll(
-          '.cv-cell[data-stem="' + el.dataset.stem + '"]');
-        el.addEventListener('pointerenter', () => mates().forEach(c => c.classList.add('cv-hi')));
-        el.addEventListener('pointerleave', () => mates().forEach(c => c.classList.remove('cv-hi')));
-        el.addEventListener('cv-grab', () => {
-          document.querySelectorAll('.cmp-cell[data-stem="' + el.dataset.stem + '"]')
-            .forEach(c => c.classList.add('cv-touched'));
-        });
-        build(canvas, spec, base).then(view => {
-          if (note) note.remove();
-          const stem = el.dataset.stem;
-          (pairs[stem] = pairs[stem] || []).push(view);
-          link(pairs[stem]);
-        }).catch(err => {
-          if (note) note.textContent = 'failed to load'; console.error(err);
-        });
+        const c = byEl.get(e.target);
+        c.visible = e.isIntersecting;
+        c.seen = ++clock;
+        if (c.visible) show(c);
+        else if (c.view) c.view.setVisible(false);
       });
     }, { rootMargin: '200px' });
-    document.querySelectorAll('.cv-cell').forEach(el => io.observe(el));
+    cells.forEach(c => io.observe(c.el));
   });
 }

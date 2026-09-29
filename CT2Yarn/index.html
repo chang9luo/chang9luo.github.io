@@ -115,7 +115,6 @@
   }
   </script>
 
-  <script src="https://documentcloud.adobe.com/view-sdk/main.js"></script>
   <script defer src="./static/js/fontawesome.all.min.js"></script>
   <script src="./static/js/bulma-carousel.min.js"></script>
   <script src="./static/js/bulma-slider.min.js"></script>
@@ -274,10 +273,42 @@
       display: flex; align-items: center; justify-content: center;
       font-size: 11px; color: #999; pointer-events: none;
     }
+    /* Phones: the five-column table has no room, so each sample becomes a
+       heading over a 2x2 grid, and every cell names its own column in a
+       corner chip since the header row is gone. */
     @media (max-width: 768px) {
       .cmp-head { display: none; }
-      .cmp-row { grid-template-columns: 56px repeat(2, 1fr); }
+      .cmp-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 22px; }
+      .cmp-label { grid-column: 1 / -1; text-align: left; font-size: 15px; color: #363636; padding: 0; }
+      .cmp-label::before { content: "Sample "; font-weight: 400; color: #7a7a7a; }
+      .cmp-cell::before {
+        position: absolute; left: 6px; top: 6px; z-index: 1;
+        font-size: 11px; line-height: 1; color: #1f2d3d;
+        background: rgba(255, 255, 255, 0.86);
+        padding: 4px 7px; border-radius: 10px;
+        box-shadow: 0 1px 3px rgba(16, 24, 40, 0.14);
+        pointer-events: none;
+      }
+      .cmp-row > .cmp-cell:nth-child(2)::before { content: "Photograph"; }
+      .cmp-row > .cmp-cell:nth-child(3)::before { content: "CT volume"; }
+      .cmp-row > .cmp-cell:nth-child(4)::before { content: "Reconstructed"; }
+      .cmp-row > .cmp-cell:nth-child(5)::before { content: "Final curve"; }
+
+      /* long centred or justified paragraphs read badly this narrow */
+      .hero.teaser .subtitle { font-size: 1rem; line-height: 1.6; text-align: left !important; }
+      .has-text-justified { text-align: left !important; }
     }
+
+    /* Phones have no hover: a tap flips a dataset tile (see the strip's script),
+       and the hint under the strip says so. */
+    .ds-item.show-ct .ds-flip .ds-ct { opacity: 1; }
+    .ds-item.show-ct .ds-flip .ds-photo { opacity: 0; }
+    .hint-touch { display: none; }
+    @media (hover: none) {
+      .hint-hover { display: none; }
+      .hint-touch { display: inline; }
+    }
+    .zoomable { cursor: zoom-in; display: block; }
     .vid-caption {
       font-size: 14px;
       color: #4a4a4a;
@@ -453,7 +484,9 @@
     <div class="columns is-centered has-text-centered">
       <div class="column is-full">
         <h2 class="title is-3">Pipeline</h2>
-        <img src="./static/images/pipeline.png" alt="CT2Yarn pipeline" style="width: 100%;">
+        <a class="zoomable" href="./static/images/pipeline.png" target="_blank" rel="noopener" title="Open full size">
+          <img src="./static/images/pipeline.png" alt="CT2Yarn pipeline" style="width: 100%;">
+        </a>
         <p class="vid-caption has-text-justified" style="margin-top: 14px;">
           A crocheted sample is scanned, converted into an oriented point cloud by Gabor
           filtering, condensed onto the yarn centre by an anisotropic mean shift, skeletonized
@@ -497,7 +530,7 @@
     <div class="content has-text-justified">
       <p>
         Eighteen micro-CT scans of real crocheted samples, each one continuous yarn. Each
-        tile shows the photograph of the physical piece and, on hover, the volume rendering
+        tile shows the photograph of the physical piece and, on hover (a tap on a phone), the volume rendering
         of its scan. The raw volumes are archived on
         <a href="https://doi.org/10.5281/zenodo.22822228">Zenodo</a> under CC BY 4.0.
       </p>
@@ -759,7 +792,7 @@
         </div>
       </div>
     </div>
-    <p class="ds-hint has-text-centered">Hover to pause and reveal the CT volume. Drag to browse.</p>
+    <p class="ds-hint has-text-centered"><span class="hint-hover">Hover to pause and reveal the CT volume. Drag to browse.</span><span class="hint-touch">Tap a tile to see its CT volume. Swipe to browse.</span></p>
   </div>
 </section>
 
@@ -967,8 +1000,10 @@
   <div class="container is-max-desktop">
     <h2 class="title is-3 has-text-centered">Applications</h2>
 
-    <img src="./static/images/applications.jpg" alt="Downstream applications"
-         style="width: 100%; margin-bottom: 10px;">
+    <a class="zoomable" href="./static/images/applications.jpg" target="_blank" rel="noopener" title="Open full size">
+      <img src="./static/images/applications.jpg" alt="Downstream applications"
+           style="width: 100%; margin-bottom: 10px;">
+    </a>
 
     <div class="content has-text-justified">
       <p>
@@ -1016,11 +1051,12 @@
 
 <section class="section" id="BibTeX">
   <div class="container is-max-desktop content">
-    <h2 class="title">BibTeX</h2>
-    <div style="position: relative;">
-      <button class="button is-small bibtex-copy" type="button" style="position: absolute; top: 0.75em; right: 0.75em;">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 1rem;">
+      <h2 class="title" style="margin: 0;">BibTeX</h2>
+      <button class="button is-small bibtex-copy" type="button">
         <span class="icon"><i class="far fa-copy"></i></span><span class="bibtex-copy-label">Copy</span>
       </button>
+    </div>
     <pre><code>
 @inproceedings{ct2yarn_luo26,
     booktitle = {Pacific Graphics 2026 - Conference Papers and Posters},
@@ -1033,7 +1069,6 @@
     DOI       = {10.2312/pg.20261024}
 }
     </code></pre>
-    </div>
   </div>
 </section>
 
@@ -1051,7 +1086,7 @@
 </section>
 
 <script type="module">
-  import { initCurveViewers } from './static/js/curveviewer.js';
+  import { initCurveViewers } from './static/js/curveviewer.js?v=20260929';
   initCurveViewers('./static/curves/manifest.json', './static/curves/');
 </script>
 
@@ -1094,6 +1129,13 @@
   box.addEventListener('pointercancel', stop);
   // a drag should not count as a tap on the tile underneath
   box.addEventListener('click', e => { if (moved > 4) { e.stopPropagation(); e.preventDefault(); } }, true);
+  // Phones have no hover: a tap flips a tile to its CT volume, another flips it back.
+  if (window.matchMedia('(hover: none)').matches) {
+    box.addEventListener('click', e => {
+      const item = e.target.closest('.ds-item');
+      if (item) item.classList.toggle('show-ct');
+    });
+  }
 
   (function tick() {
     requestAnimationFrame(tick);
@@ -1111,7 +1153,7 @@
 // "Copy" on the BibTeX block: puts the entry on the clipboard, then says so for a moment.
 document.querySelectorAll('.bibtex-copy').forEach(function (btn) {
   var label = btn.querySelector('.bibtex-copy-label');
-  var text = btn.parentNode.querySelector('code').textContent.trim() + '\n';
+  var text = btn.closest('section').querySelector('code').textContent.trim() + '\n';
   function done(ok) {
     label.textContent = ok ? 'Copied!' : 'Copy failed';
     setTimeout(function () { label.textContent = 'Copy'; }, 1500);
