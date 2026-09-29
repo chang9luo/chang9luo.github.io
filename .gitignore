@@ -1,0 +1,5 @@
+# Local LaTeX sources of papers: kept on this machine only, never pushed or published.
+papers/
+
+# Python bytecode caches from running scripts/
+__pycache__/
