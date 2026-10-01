@@ -82,12 +82,15 @@
   }
   aside h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
   #preview {
-    aspect-ratio: 1; border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
-    display: flex; align-items: center; justify-content: center; text-align: center;
-    color: #777; font-size: 13px;
+    display: flex; align-items: center; justify-content: center; min-height: 120px;
+    border: 1px solid var(--line); border-radius: 8px; overflow: hidden; text-align: center;
+    color: var(--muted); font-size: 13px;
+  }
+  /* the checkerboard is behind the picture only, so that a fill colour is not taken for transparency */
+  #preview img {
+    display: block; max-width: 100%; max-height: 260px;
     background: repeating-conic-gradient(#fff 0 25%, #dcdcdc 0 50%) 0 0 / 16px 16px;
   }
-  #preview img { width: 100%; height: 100%; object-fit: contain; display: block; }
   #preview img[hidden] { display: none; }
   #size { color: var(--muted); font-size: 13px; min-height: 1.5em; }
   aside .row { display: flex; gap: 8px; }
@@ -164,11 +167,11 @@ const TEXT = {
     hint: 'Ctrl+V to paste an image · drag to select · Esc to start over',
     emptyTitle: 'Press Ctrl+V to paste a screenshot',
     emptySub: 'or drop an image here / click to choose a file',
-    resultTitle: 'Result (square PNG)',
+    resultTitle: 'Result (PNG, same size as the original)',
     placeholder: 'The preview appears here',
     copy: 'Copy (Ctrl+C)', save: 'Save (Ctrl+S)',
     auto: 'Copy to the clipboard as soon as a selection is made',
-    fill: 'Fill the empty area with a color instead of leaving it transparent',
+    fill: 'Fill the cut-away area with a color instead of leaving it transparent',
     pick: 'Pick from screen', updated: 'Updated, press Copy to copy it',
     copied: 'Copied to clipboard', copyFailed: 'Copy failed, use Save instead',
     noImage: 'No image in the clipboard', badImage: 'Could not read this image',
@@ -179,11 +182,11 @@ const TEXT = {
     hint: 'Ctrl+V 粘贴图片 · 按住左键拖动圈选 · Esc 重选',
     emptyTitle: 'Ctrl+V 粘贴截图',
     emptySub: '或把图片拖进来 / 点击这里选择文件',
-    resultTitle: '结果（方形 PNG）',
+    resultTitle: '结果（PNG，尺寸与原图相同）',
     placeholder: '圈选后在这里预览',
     copy: '复制 (Ctrl+C)', save: '保存 (Ctrl+S)',
     auto: '圈选完成后自动复制到剪贴板',
-    fill: '空白部分用颜色填充（不勾选则保持透明）',
+    fill: '裁掉的部分用颜色填充（不勾选则保持透明）',
     pick: '从屏幕取色', updated: '已更新，请点「复制」',
     copied: '已复制到剪贴板', copyFailed: '复制失败，请用「保存」',
     noImage: '剪贴板里没有图片', badImage: '无法读取这张图片',
@@ -205,7 +208,7 @@ let fit = { x: 0, y: 0, k: 1 };  // image px -> CSS px on the stage
 let mode = 'lasso';
 let sel = null;                  // { type, pts } in image coordinates
 let drawing = false;
-let result = null;               // { side, blob: Promise<Blob>, url }
+let result = null;               // { w, h, blob: Promise<Blob>, url }
 let raf = 0, toastTimer = 0;
 
 function toast(key, bad) {
@@ -348,21 +351,22 @@ function finish() {
   redraw();
 }
 
-// Cuts the selection out and centres it on a square: transparent, or of the fill colour.
+// Keeps the selection where it is in a picture of the original size; everything cut away
+// becomes transparent, or the fill colour.
 // `quiet` is for a cut the user did not just draw (a new fill colour), where the
 // browser may refuse the automatic copy.
 function cut(quiet) {
-  const b = selBox(sel), side = Math.max(b.w, b.h), c = document.createElement('canvas');
-  c.width = c.height = side;
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
   const g = c.getContext('2d');
   if ($('fill').checked) {
     g.fillStyle = $('fillColor').value;
-    g.fillRect(0, 0, side, side);
+    g.fillRect(0, 0, c.width, c.height);
   }
-  g.translate(Math.floor((side - b.w) / 2) - b.x, Math.floor((side - b.h) / 2) - b.y);
   g.clip(selPath(sel));
   g.drawImage(img, 0, 0);
-  setResult({ side, blob: new Promise(res => c.toBlob(res, 'image/png')) });
+  setResult({ w: c.width, h: c.height, blob: new Promise(res => c.toBlob(res, 'image/png')) });
   if ($('auto').checked) copy(quiet);
 }
 
@@ -376,9 +380,9 @@ function setResult(r) {
   if (result?.url) URL.revokeObjectURL(result.url);
   result = r;
   $('copy').disabled = $('save').disabled = !r;
-  $('out').hidden = true;
+  if (!r) $('out').hidden = true;  // while a new cut is being encoded the previous one stays up
   $('placeholder').hidden = !!r;
-  $('size').textContent = r ? `${r.side} × ${r.side} px` : '';
+  $('size').textContent = r ? `${r.w} × ${r.h} px` : '';
   r?.blob.then(b => {
     if (result !== r) return;
     r.url = URL.createObjectURL(b);
