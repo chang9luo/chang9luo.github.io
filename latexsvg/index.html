@@ -310,6 +310,7 @@ function applyLang() {
   $('lang').textContent = t('other');
   if (ready) { renderChips(); renderReference(); }
   else $('preview').textContent = t('loading');
+  dispatchEvent(new Event('langchange'));  // for reference.js
 }
 
 // Replaces each named symbol (\name) by its LaTeX, the way a parameterless macro
@@ -646,6 +647,7 @@ window.MathJax = {
   },
 };
 </script>
+<script src="reference.js"></script>
 <script src="mathjax/tex-svg-full.js" onerror="document.getElementById('preview').textContent = t('loadFailed')"></script>
 </body>
 </html>
