@@ -7,10 +7,20 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Free Crop</title>
 <link rel="icon" href="icon.svg">
+<!-- Light by day, dark by night, with the homepage's own logic and toggle. -->
+<script src="../tz-coords.js"></script>
+<script src="../theme.js"></script>
 <style>
+  /* Colours follow the homepage: light by default, dark when ../theme.js sets data-theme="dark". */
   :root {
-    --bg: #17181b; --panel: #212327; --line: #34373d; --text: #e9eaec;
-    --muted: #979da6; --accent: #4c9dff;
+    color-scheme: light;
+    --bg: #e8eaed; --panel: #ffffff; --line: #d4d4d4; --text: #000000; --muted: #666666;
+    --accent: #1772d0; --on-accent: #ffffff; --btn: #f2f2f2; --btn-hover: #e6e6e6;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #101216; --panel: #15181d; --line: #363b44; --text: #e4e6ea; --muted: #99a2ad;
+    --accent: #6ab0f3; --on-accent: #0d1117; --btn: #23272e; --btn-hover: #2c313a;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
@@ -26,18 +36,32 @@
   }
   header .hint { margin-left: auto; color: var(--muted); font-size: 13px; }
   button {
-    font: inherit; color: var(--text); background: #2d3035;
+    font: inherit; color: var(--text); background: var(--btn);
     border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; cursor: pointer;
   }
-  button:hover:not(:disabled) { background: #383c42; }
+  button:hover:not(:disabled) { background: var(--btn-hover); }
   button:disabled { opacity: .45; cursor: default; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.primary:hover:not(:disabled) { background: #6aadff; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.12); }
+  /* the same Home pill as on the project pages */
+  .home-link {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px;
+    background: var(--btn); border: 1px solid var(--line); color: var(--text);
+    font-weight: 600; text-decoration: none;
+  }
+  .home-link:hover { background: var(--btn-hover); }
+  .theme-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0; border-radius: 50%;
+  }
+  .theme-toggle svg { display: block; width: 15px; height: 15px; }
+  .theme-toggle .icon-sun, [data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+  [data-theme="dark"] .theme-toggle .icon-sun { display: block; }
   .seg { display: flex; }
   .seg button { border-radius: 0; }
   .seg button:first-child { border-radius: 6px 0 0 6px; }
   .seg button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
-  .seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .seg button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
   main { flex: 1; display: flex; min-height: 0; }
   #stage { flex: 1; position: relative; min-width: 0; }
@@ -68,6 +92,10 @@
   aside .row { display: flex; gap: 8px; }
   aside .row button { flex: 1; }
   aside label { display: flex; align-items: flex-start; gap: 6px; color: var(--muted); font-size: 13px; }
+  #fillColor {
+    flex: none; width: 46px; height: 32px; padding: 0; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 6px; background: none;
+  }
 
   #toast {
     position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
@@ -80,6 +108,10 @@
 </head>
 <body>
 <header>
+  <a class="home-link" href="../" title="Back to Chang Luo's homepage">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10.5V20h5v-6h4v6h5v-9.5"/></svg>
+    <span data-i18n="home"></span>
+  </a>
   <button id="open" data-i18n="open"></button>
   <div class="seg">
     <button id="lasso" class="on" data-i18n="lasso"></button>
@@ -87,6 +119,10 @@
   </div>
   <span class="hint" data-i18n="hint"></span>
   <button id="lang"></button>
+  <button class="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 1.6v2.6M12 19.8v2.6M4.2 4.2l1.9 1.9M17.9 17.9l1.9 1.9M1.6 12h2.6M19.8 12h2.6M4.2 19.8l1.9-1.9M17.9 6.1l1.9-1.9"></path></svg>
+  </button>
 </header>
 <main>
   <div id="stage">
@@ -105,6 +141,11 @@
       <button id="save" disabled data-i18n="save"></button>
     </div>
     <label><input type="checkbox" id="auto" checked> <span data-i18n="auto"></span></label>
+    <label><input type="checkbox" id="fill"> <span data-i18n="fill"></span></label>
+    <div class="row">
+      <input type="color" id="fillColor" value="#ffffff">
+      <button id="pick" data-i18n="pick"></button>
+    </div>
   </aside>
 </main>
 <input type="file" id="file" accept="image/*" hidden>
@@ -117,28 +158,32 @@ const stage = $('stage'), view = $('view'), ctx = view.getContext('2d');
 // English unless the other language was picked with the toggle before.
 const TEXT = {
   en: {
-    title: 'Free Crop', other: '中文',
+    title: 'Free Crop', other: '中文', home: 'Home',
     open: 'Open image', lasso: 'Freehand', rect: 'Rectangle',
     hint: 'Ctrl+V to paste an image · drag to select · Esc to start over',
     emptyTitle: 'Press Ctrl+V to paste a screenshot',
     emptySub: 'or drop an image here / click to choose a file',
-    resultTitle: 'Result (transparent square PNG)',
+    resultTitle: 'Result (square PNG)',
     placeholder: 'The preview appears here',
     copy: 'Copy (Ctrl+C)', save: 'Save (Ctrl+S)',
     auto: 'Copy to the clipboard as soon as a selection is made',
+    fill: 'Fill the empty area with a color instead of leaving it transparent',
+    pick: 'Pick from screen', updated: 'Updated, press Copy to copy it',
     copied: 'Copied to clipboard', copyFailed: 'Copy failed, use Save instead',
     noImage: 'No image in the clipboard', badImage: 'Could not read this image',
   },
   zh: {
-    title: '自由裁剪', other: 'English',
+    title: '自由裁剪', other: 'English', home: '主页',
     open: '打开图片', lasso: '自由圈选', rect: '矩形',
     hint: 'Ctrl+V 粘贴图片 · 按住左键拖动圈选 · Esc 重选',
     emptyTitle: 'Ctrl+V 粘贴截图',
     emptySub: '或把图片拖进来 / 点击这里选择文件',
-    resultTitle: '结果（透明背景 · 方形 PNG）',
+    resultTitle: '结果（方形 PNG）',
     placeholder: '圈选后在这里预览',
     copy: '复制 (Ctrl+C)', save: '保存 (Ctrl+S)',
     auto: '圈选完成后自动复制到剪贴板',
+    fill: '空白部分用颜色填充（不勾选则保持透明）',
+    pick: '从屏幕取色', updated: '已更新，请点「复制」',
     copied: '已复制到剪贴板', copyFailed: '复制失败，请用「保存」',
     noImage: '剪贴板里没有图片', badImage: '无法读取这张图片',
   },
@@ -298,16 +343,30 @@ function finish() {
     redraw();
     return;
   }
-  // cut the selection out and centre it on a transparent square
-  const side = Math.max(b.w, b.h), c = document.createElement('canvas');
+  cut();
+  redraw();
+}
+
+// Cuts the selection out and centres it on a square: transparent, or of the fill colour.
+// `quiet` is for a cut the user did not just draw (a new fill colour), where the
+// browser may refuse the automatic copy.
+function cut(quiet) {
+  const b = selBox(sel), side = Math.max(b.w, b.h), c = document.createElement('canvas');
   c.width = c.height = side;
   const g = c.getContext('2d');
+  if ($('fill').checked) {
+    g.fillStyle = $('fillColor').value;
+    g.fillRect(0, 0, side, side);
+  }
   g.translate(Math.floor((side - b.w) / 2) - b.x, Math.floor((side - b.h) / 2) - b.y);
   g.clip(selPath(sel));
   g.drawImage(img, 0, 0);
   setResult({ side, blob: new Promise(res => c.toBlob(res, 'image/png')) });
-  if ($('auto').checked) copy();
-  redraw();
+  if ($('auto').checked) copy(quiet);
+}
+
+function refill() {
+  if (result && !drawing) cut(true);
 }
 view.addEventListener('pointerup', finish);
 view.addEventListener('pointercancel', finish);
@@ -327,13 +386,13 @@ function setResult(r) {
   });
 }
 
-async function copy() {
+async function copy(quiet) {
   if (!result) return;
   try {
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': result.blob })]);
     toast('copied');
   } catch {
-    toast('copyFailed', true);
+    toast(quiet === true ? 'updated' : 'copyFailed', true);
   }
 }
 
@@ -355,8 +414,24 @@ function setMode(m) {
 
 $('lasso').onclick = () => setMode('lasso');
 $('rect').onclick = () => setMode('rect');
-$('copy').onclick = copy;
+$('copy').onclick = () => copy();
 $('save').onclick = save;
+$('fill').onchange = refill;
+$('fillColor').onchange = () => {
+  try { localStorage.setItem('crop-fill-color', $('fillColor').value); } catch {}
+  $('fill').checked = true;  // choosing a colour means wanting it
+  refill();
+};
+if (window.EyeDropper) {
+  $('pick').onclick = async () => {
+    let picked;
+    try { picked = await new EyeDropper().open(); } catch { return; }  // Esc
+    $('fillColor').value = picked.sRGBHex;
+    $('fillColor').onchange();
+  };
+} else {
+  $('pick').hidden = true;
+}
 $('open').onclick = $('empty').onclick = () => $('file').click();
 $('file').onchange = e => { if (e.target.files[0]) load(e.target.files[0]); e.target.value = ''; };
 $('lang').onclick = () => {
@@ -397,6 +472,7 @@ addEventListener('keydown', e => {
   }
 });
 
+try { $('fillColor').value = localStorage.getItem('crop-fill-color') || '#ffffff'; } catch {}
 applyLang();
 new ResizeObserver(layout).observe(stage);
 </script>
