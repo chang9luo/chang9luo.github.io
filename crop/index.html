@@ -10,17 +10,18 @@
 <!-- Light by day, dark by night, with the homepage's own logic and toggle. -->
 <script src="../tz-coords.js"></script>
 <script src="../theme.js"></script>
+<script src="../colorpicker.js"></script>
 <style>
   /* Colours follow the homepage: light by default, dark when ../theme.js sets data-theme="dark". */
   :root {
     color-scheme: light;
     --bg: #e8eaed; --panel: #ffffff; --line: #d4d4d4; --text: #000000; --muted: #666666;
-    --accent: #1772d0; --on-accent: #ffffff; --btn: #f2f2f2; --btn-hover: #e6e6e6;
+    --accent: #1772d0; --on-accent: #ffffff; --btn: #f2f2f2; --btn-hover: #e6e6e6; --bad: #c62828;
   }
   [data-theme="dark"] {
     color-scheme: dark;
     --bg: #101216; --panel: #15181d; --line: #363b44; --text: #e4e6ea; --muted: #99a2ad;
-    --accent: #6ab0f3; --on-accent: #0d1117; --btn: #23272e; --btn-hover: #2c313a;
+    --accent: #6ab0f3; --on-accent: #0d1117; --btn: #23272e; --btn-hover: #2c313a; --bad: #ff8080;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
@@ -426,8 +427,8 @@ if (window.EyeDropper) {
   $('pick').onclick = async () => {
     let picked;
     try { picked = await new EyeDropper().open(); } catch { return; }  // Esc
-    $('fillColor').value = picked.sRGBHex;
-    $('fillColor').onchange();
+    const rgb = ColorPicker.read(picked.sRGBHex);
+    if (rgb) ColorPicker.set($('fillColor'), rgb);
   };
 } else {
   $('pick').hidden = true;
@@ -473,6 +474,7 @@ addEventListener('keydown', e => {
 });
 
 try { $('fillColor').value = localStorage.getItem('crop-fill-color') || '#ffffff'; } catch {}
+ColorPicker.attach($('fillColor'));
 applyLang();
 new ResizeObserver(layout).observe(stage);
 </script>

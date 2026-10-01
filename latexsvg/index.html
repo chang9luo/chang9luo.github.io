@@ -10,6 +10,7 @@
 <!-- Light by day, dark by night, with the homepage's own logic and toggle. -->
 <script src="../tz-coords.js"></script>
 <script src="../theme.js"></script>
+<script src="../colorpicker.js"></script>
 <style>
   /* Colours follow the homepage: light by default, dark when ../theme.js sets data-theme="dark". */
   :root {
@@ -112,7 +113,22 @@
   .row { display: flex; gap: 8px; align-items: center; }
   #dims { margin-left: auto; color: var(--muted); font-size: 13px; }
   details { margin-top: 14px; color: var(--muted); font-size: 13px; }
+  section > details:first-child { margin-top: 0; }
   summary { cursor: pointer; }
+  summary span + span { margin-left: 10px; opacity: .75; }
+  /* reference cards: white like the symbol chips, so the black glyphs read in both themes */
+  .cells { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .cell {
+    display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-width: 54px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px;
+    background: #fff; color: #111; font-size: 18px; cursor: pointer;
+  }
+  .cell:hover, .cell:focus-visible { background: #e3efff; outline: none; }
+  .cell code { font: 11px var(--mono); color: #555; }
+  .cell small { font-size: 11px; color: #777; }
+  .cell .raw { font: 13px var(--mono); }
+  .pair { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; background: #fff; overflow: hidden; }
+  .pair .cell { border: 0; border-radius: 0; }
   #src { margin-top: 8px; font-size: 12px; }
 
   #toast {
@@ -158,6 +174,17 @@
       <div class="note" data-i18n="nameNote"></div>
       <div id="symError" class="error"></div>
     </form>
+  </section>
+
+  <section>
+    <details id="fontsBox">
+      <summary><span data-i18n="fonts"></span><span data-i18n="fontsTip"></span></summary>
+      <div id="fonts" class="cells"></div>
+    </details>
+    <details id="greekBox">
+      <summary><span data-i18n="greek"></span><span data-i18n="greekTip"></span></summary>
+      <div id="greek" class="cells"></div>
+    </details>
   </section>
 
   <section>
@@ -211,7 +238,9 @@ const TEXT = {
     nameNote: 'With a name such as rx, the symbol is inserted and usable as the short command \\rx. Without one, a click inserts the LaTeX itself.',
     emptySym: 'Type the LaTeX of the symbol first.',
     badName: 'A name can only contain letters (a-z, A-Z).',
-    input: 'Your LaTeX equation', inputTip: 'Ctrl+Enter copies the SVG',
+    input: 'Your LaTeX equation', inputTip: 'Ctrl+Enter copies the SVG · with text selected, _ or ^ puts it in braces',
+    fonts: 'Font styles', fontsTip: 'click one to apply it to the selection',
+    greek: 'Greek letters', greekTip: 'uppercase and lowercase, click one to insert it',
     textColor: 'Text color', colorize: 'Color the selection', pickTip: 'Pick a color from the screen',
     colorizeTip: 'Wraps the selected LaTeX in \\textcolor, in the equation or in the new symbol, whichever you used last',
     fontSize: 'Font size', color: 'Formula color', display: 'Display style',
@@ -227,7 +256,9 @@ const TEXT = {
     nameNote: '起了名字（如 rx）后，点击会插入短命令 \\rx，也可以直接手打 \\rx；不起名字则点击时插入 LaTeX 原文。',
     emptySym: '请先输入符号的 LaTeX。',
     badName: '名字只能包含英文字母（a-z、A-Z）。',
-    input: 'LaTeX 公式', inputTip: 'Ctrl+Enter 复制 SVG',
+    input: 'LaTeX 公式', inputTip: 'Ctrl+Enter 复制 SVG · 选中后按 _ 或 ^ 会给选中部分加上 {}',
+    fonts: '字体样式', fontsTip: '点击即可套用到选中的内容',
+    greek: '希腊字母', greekTip: '大写和小写，点击插入',
     textColor: '文字颜色', colorize: '给选中部分上色', pickTip: '从屏幕取色',
     colorizeTip: '用 \\textcolor 包住选中的 LaTeX；作用于公式或新建符号的输入框，以最后使用的那个为准',
     fontSize: '字号', color: '公式颜色', display: '行间公式样式',
@@ -277,7 +308,7 @@ function applyLang() {
   for (const el of document.querySelectorAll('[data-i18n-ph]')) el.placeholder = t(el.dataset.i18nPh);
   for (const el of document.querySelectorAll('[data-i18n-title]')) el.title = t(el.dataset.i18nTitle);
   $('lang').textContent = t('other');
-  if (ready) renderChips();
+  if (ready) { renderChips(); renderReference(); }
   else $('preview').textContent = t('loading');
 }
 
@@ -407,23 +438,86 @@ function insertInto(field, text) {
   field.dispatchEvent(new Event('input'));
 }
 
-function insert(text) {
-  if (/\\[A-Za-z]+$/.test(text)) text += ' ';  // so that letters typed next do not join the command
-  insertInto($('tex'), text);
-}
-
 // The LaTeX field used last: the equation, or the new symbol while its form is open.
 let field = $('tex');
-for (const id of ['tex', 'symTex']) $(id).addEventListener('focus', () => field = $(id));
-$('colorize').addEventListener('pointerdown', () => {  // the button is about to take the focus away
+for (const id of ['tex', 'symTex']) {
+  $(id).addEventListener('focus', () => field = $(id));
+  // With text selected, _ or ^ makes the whole selection the sub- or superscript: x_ij -> x_{ij}.
+  $(id).addEventListener('keydown', e => {
+    const el = e.target, a = el.selectionStart, b = el.selectionEnd;
+    if ((e.key !== '_' && e.key !== '^') || a === b || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+    e.preventDefault();
+    const braced = `{${el.value.slice(a, b)}}`;
+    insertInto(el, el.value[a - 1] === e.key ? braced : e.key + braced);  // no second _ after one already there
+  });
+}
+addEventListener('pointerdown', () => {  // whatever is pressed next takes the focus away
   if (['tex', 'symTex'].includes(document.activeElement.id)) field = document.activeElement;
-});
+}, true);
+const currentField = () => $('symForm').hidden ? $('tex') : field;
 
-function colorize() {
-  if ($('symForm').hidden) field = $('tex');
-  const selected = field.value.slice(field.selectionStart, field.selectionEnd);
-  insertInto(field, `\\textcolor{${$('textColor').value}}{${selected}}`);
-  if (!selected) field.setSelectionRange(field.selectionStart - 1, field.selectionStart - 1);  // between the braces
+function insert(text) {
+  if (/\\[A-Za-z]+$/.test(text)) text += ' ';  // so that letters typed next do not join the command
+  insertInto(currentField(), text);
+}
+
+// Puts the selection inside before{...}; with nothing selected, leaves the cursor between the braces.
+function wrap(before) {
+  const f = currentField(), selected = f.value.slice(f.selectionStart, f.selectionEnd);
+  insertInto(f, `${before}{${selected}}`);
+  if (!selected) f.setSelectionRange(f.selectionStart - 1, f.selectionStart - 1);
+}
+
+const colorize = () => wrap(`\\textcolor{${$('textColor').value}}`);
+
+// Reference: the math font commands with a sample of each, and the Greek alphabet.
+const FONTS = [  // command, sample, what it is (en, zh)
+  ['mathrm', 'ABC\\,abc', 'upright', '正体'],
+  ['mathit', 'ABC\\,abc', 'italic', '斜体'],
+  ['mathbf', 'ABC\\,abc', 'bold', '粗体'],
+  ['boldsymbol', 'ABC\\,\\alpha\\beta', 'bold italic', '粗斜体'],
+  ['mathsf', 'ABC\\,abc', 'sans serif', '无衬线'],
+  ['mathtt', 'ABC\\,abc', 'monospace', '等宽'],
+  ['mathbb', 'ABC\\,RNZ', 'blackboard bold', '黑板粗体'],
+  ['mathcal', 'ABC\\,LNO', 'calligraphic', '花体'],
+  ['mathscr', 'ABC\\,LNO', 'script', '手写体'],
+  ['mathfrak', 'ABC\\,abc', 'Fraktur', '哥特体'],
+  ['text', 'plain text', 'text', '普通文字'],
+  ['operatorname', 'argmin', 'operator name', '算子名'],
+];
+const GREEK = [  // uppercase (a command, or the Latin letter it looks like), then the lowercase forms
+  ['A', '\\alpha'], ['B', '\\beta'], ['\\Gamma', '\\gamma'], ['\\Delta', '\\delta'],
+  ['E', '\\epsilon', '\\varepsilon'], ['Z', '\\zeta'], ['H', '\\eta'], ['\\Theta', '\\theta', '\\vartheta'],
+  ['I', '\\iota'], ['K', '\\kappa', '\\varkappa'], ['\\Lambda', '\\lambda'], ['M', '\\mu'],
+  ['N', '\\nu'], ['\\Xi', '\\xi'], ['O', 'o'], ['\\Pi', '\\pi', '\\varpi'],
+  ['P', '\\rho', '\\varrho'], ['\\Sigma', '\\sigma', '\\varsigma'], ['T', '\\tau'], ['\\Upsilon', '\\upsilon'],
+  ['\\Phi', '\\phi', '\\varphi'], ['X', '\\chi'], ['\\Psi', '\\psi'], ['\\Omega', '\\omega'],
+];
+
+function cell(tex, code, note, onclick) {
+  const el = document.createElement('span');
+  el.className = 'cell';
+  el.tabIndex = 0;
+  el.setAttribute('role', 'button');
+  el.append(symbolNode(tex), Object.assign(document.createElement('code'), { textContent: code }));
+  if (note) el.append(Object.assign(document.createElement('small'), { textContent: note }));
+  el.onclick = onclick;
+  el.onkeydown = e => { if (e.key === 'Enter') onclick(); };
+  return el;
+}
+
+function renderReference() {
+  $('fonts').textContent = '';
+  for (const [cmd, sample, en, zh] of FONTS) {
+    $('fonts').append(cell(`\\${cmd}{${sample}}`, `\\${cmd}{…}`, lang === 'zh' ? zh : en, () => wrap('\\' + cmd)));
+  }
+  $('greek').textContent = '';
+  for (const forms of GREEK) {
+    const pair = document.createElement('span');
+    pair.className = 'pair';
+    for (const tex of forms) pair.append(cell(tex, tex, '', () => insert(tex)));
+    $('greek').append(pair);
+  }
 }
 
 function renderChips() {
@@ -509,12 +603,16 @@ for (const button of document.querySelectorAll('.pick')) {
   button.onclick = async () => {
     let picked;
     try { picked = await new EyeDropper().open(); } catch { return; }  // Esc
-    $(button.dataset.for).value = picked.sRGBHex;
-    $(button.dataset.for).oninput();
+    const rgb = ColorPicker.read(picked.sRGBHex);
+    if (rgb) ColorPicker.set($(button.dataset.for), rgb);
   };
 }
 $('copy').onclick = copy;
 $('download').onclick = download;
+for (const id of ['fontsBox', 'greekBox']) {
+  $(id).open = store.get(id, 'false') === 'true';
+  $(id).ontoggle = () => store.set(id, $(id).open);
+}
 $('lang').onclick = () => {
   lang = lang === 'en' ? 'zh' : 'en';
   store.set('lang', lang);
@@ -525,6 +623,7 @@ $('tex').value = store.get('tex', 'x = \\sin \\left( \\frac{\\pi}{2} \\right)');
 $('size').value = store.get('size', '16');
 $('color').value = store.get('color', '#000000');
 $('textColor').value = store.get('textColor', '#e03131');
+for (const id of ['textColor', 'color']) ColorPicker.attach($(id));
 $('display').checked = store.get('display', 'true') !== 'false';
 applyLang();
 
@@ -540,6 +639,7 @@ window.MathJax = {
       MathJax.startup.promise.then(() => {
         ready = true;
         renderChips();
+        renderReference();
         render();
       });
     },
