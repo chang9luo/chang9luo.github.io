@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Unlisted personal tool: not linked from the homepage, not in the sitemap. -->
+<meta name="robots" content="noindex, nofollow">
+<title>Remove Background</title>
+<link rel="icon" href="icon.svg">
+<!-- Light by day, dark by night, with the homepage's own logic and toggle. -->
+<script src="../tz-coords.js"></script>
+<script src="../theme.js"></script>
+<style>
+  /* Colours follow the homepage: light by default, dark when ../theme.js sets data-theme="dark". */
+  :root {
+    color-scheme: light;
+    --bg: #e8eaed; --panel: #ffffff; --line: #d4d4d4; --text: #000000; --muted: #666666;
+    --accent: #1772d0; --on-accent: #ffffff; --btn: #f2f2f2; --btn-hover: #e6e6e6; --bad: #c62828;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #101216; --panel: #15181d; --line: #363b44; --text: #e4e6ea; --muted: #99a2ad;
+    --accent: #6ab0f3; --on-accent: #0d1117; --btn: #23272e; --btn-hover: #2c313a; --bad: #ff8080;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.5 system-ui, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+    user-select: none;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header .hint { margin-left: auto; color: var(--muted); font-size: 13px; }
+  button {
+    font: inherit; color: var(--text); background: var(--btn);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: var(--btn-hover); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.12); }
+  /* the same Home pill as on the project pages */
+  .home-link {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px;
+    background: var(--btn); border: 1px solid var(--line); color: var(--text);
+    font-weight: 600; text-decoration: none;
+  }
+  .home-link:hover { background: var(--btn-hover); }
+  .theme-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0; border-radius: 50%;
+  }
+  .theme-toggle svg { display: block; width: 15px; height: 15px; }
+  .theme-toggle .icon-sun, [data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+  [data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+  .seg { display: flex; }
+  .seg button { border-radius: 0; }
+  .seg button:first-child { border-radius: 6px 0 0 6px; }
+  .seg button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+  .seg button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+  main { flex: 1; display: flex; min-height: 0; }
+  #stage {
+    flex: 1; position: relative; min-width: 0;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  #shown { display: block; max-width: 100%; max-height: 100%; min-height: 0; object-fit: contain; }
+  #shown[hidden] { display: none; }
+  #shown.cut { background: repeating-conic-gradient(#fff 0 25%, #dcdcdc 0 50%) 0 0 / 16px 16px; }
+  #stage.busy #shown { opacity: .4; }
+  #busy {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    padding: 8px 16px; border-radius: 8px; background: rgba(0, 0, 0, .72); color: #fff;
+  }
+  #stage:not(.busy) #busy { display: none; }
+  #empty {
+    position: absolute; inset: 20px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 6px; text-align: center;
+    border: 2px dashed var(--line); border-radius: 14px; color: var(--muted); cursor: pointer;
+  }
+  #empty[hidden] { display: none; }
+  #empty b { font-size: 20px; font-weight: 600; color: var(--text); }
+  body.dragging #stage { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  aside {
+    width: 280px; flex: none; display: flex; flex-direction: column; gap: 12px;
+    padding: 14px; background: var(--panel); border-left: 1px solid var(--line);
+  }
+  aside h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+  #status { min-height: 3em; }
+  #status.bad { color: var(--bad); }
+  #bar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  #bar[hidden] { display: none; }
+  #bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  #size { color: var(--muted); font-size: 13px; min-height: 1.5em; }
+  aside .row { display: flex; gap: 8px; }
+  aside .row button { flex: 1; }
+  .credit { margin-top: auto; color: var(--muted); font-size: 12px; }
+  .credit a { color: var(--accent); }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    padding: 8px 16px; border-radius: 8px; background: #2f7d4f; color: #fff;
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  #toast.show { opacity: 1; }
+  #toast.bad { background: #a13c3c; }
+</style>
+</head>
+<body>
+<header>
+  <a class="home-link" href="../" title="Back to Chang Luo's homepage">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10.5V20h5v-6h4v6h5v-9.5"/></svg>
+    <span data-i18n="home"></span>
+  </a>
+  <button id="open" data-i18n="open"></button>
+  <div class="seg">
+    <button id="showCut" class="on" disabled data-i18n="showCut"></button>
+    <button id="showOriginal" disabled data-i18n="showOriginal"></button>
+  </div>
+  <span class="hint" data-i18n="hint"></span>
+  <button id="lang"></button>
+  <button class="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 1.6v2.6M12 19.8v2.6M4.2 4.2l1.9 1.9M17.9 17.9l1.9 1.9M1.6 12h2.6M19.8 12h2.6M4.2 19.8l1.9-1.9M17.9 6.1l1.9-1.9"></path></svg>
+  </button>
+</header>
+<main>
+  <div id="stage">
+    <img id="shown" alt="" hidden>
+    <div id="busy" data-i18n="working"></div>
+    <div id="empty">
+      <b data-i18n="emptyTitle"></b>
+      <span data-i18n="emptySub"></span>
+    </div>
+  </div>
+  <aside>
+    <h2 data-i18n="resultTitle"></h2>
+    <div id="status"></div>
+    <div id="bar" hidden><i></i></div>
+    <div id="size"></div>
+    <div class="row">
+      <button id="copy" class="primary" disabled data-i18n="copy"></button>
+      <button id="save" disabled data-i18n="save"></button>
+    </div>
+    <div class="credit">
+      <span data-i18n="credit"></span>
+      <a href="https://github.com/huggingface/transformers.js" target="_blank" rel="noopener">Transformers.js</a> ·
+      <a href="https://huggingface.co/briaai/RMBG-1.4" target="_blank" rel="noopener">BRIA RMBG-1.4</a>
+    </div>
+  </aside>
+</main>
+<input type="file" id="file" accept="image/*" hidden>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// The library and the model of https://huggingface.co/spaces/Xenova/remove-background-web
+const LIBRARY = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+const MODEL = 'briaai/RMBG-1.4';
+
+// English unless the other language was picked with the toggle before.
+const TEXT = {
+  en: {
+    title: 'Remove Background', other: '中文', home: 'Home',
+    open: 'Open image', showCut: 'Result', showOriginal: 'Original',
+    hint: 'Ctrl+V to paste an image · Ctrl+C copies the result',
+    emptyTitle: 'Press Ctrl+V to paste an image',
+    emptySub: 'or drop an image here / click to choose a file',
+    resultTitle: 'Result (transparent PNG)',
+    copy: 'Copy (Ctrl+C)', save: 'Save (Ctrl+S)',
+    loading: 'Loading the model…', loadingFirst: 'Downloading the model (44 MB, first time only)…',
+    ready: 'Model ready. Paste an image to start.',
+    working: 'Removing the background…', done: 'Done in {s} s.',
+    loadFailed: 'The model could not be loaded. Check the connection and try another image to retry.',
+    failed: 'Something went wrong: ',
+    copied: 'Copied to clipboard', copyFailed: 'Copy failed, use Save instead',
+    noImage: 'No image in the clipboard', badImage: 'Could not read this image',
+    credit: 'Runs entirely in your browser; the image is not uploaded. The model is licensed for non-commercial use.',
+  },
+  zh: {
+    title: '去除背景', other: 'English', home: '主页',
+    open: '打开图片', showCut: '结果', showOriginal: '原图',
+    hint: 'Ctrl+V 粘贴图片 · Ctrl+C 复制结果',
+    emptyTitle: 'Ctrl+V 粘贴图片',
+    emptySub: '或把图片拖进来 / 点击这里选择文件',
+    resultTitle: '结果（透明背景 PNG）',
+    copy: '复制 (Ctrl+C)', save: '保存 (Ctrl+S)',
+    loading: '正在加载模型…', loadingFirst: '正在下载模型（44 MB，仅第一次需要）…',
+    ready: '模型已就绪，粘贴图片即可开始。',
+    working: '正在去除背景…', done: '完成，用时 {s} 秒。',
+    loadFailed: '模型加载失败。请检查网络，再放一张图片即可重试。',
+    failed: '出错了：',
+    copied: '已复制到剪贴板', copyFailed: '复制失败，请用「保存」',
+    noImage: '剪贴板里没有图片', badImage: '无法读取这张图片',
+    credit: '完全在浏览器本地运行，图片不会上传。模型仅限非商业用途。',
+  },
+};
+let lang = 'en';
+try { if (localStorage.getItem('removebg-lang') === 'zh') lang = 'zh'; } catch {}
+const t = key => TEXT[lang][key];
+
+let status = { key: '', extra: '', bad: false };  // what the side panel says, kept so it can be re-translated
+let model = null;      // promise of { lib, net, processor }
+let queue = Promise.resolve();
+let seq = 0;           // the newest image wins
+let originalUrl = '', cut = null;  // cut: { blob, url, w, h }
+let view = 'cut';
+let toastTimer = 0;
+
+function applyLang() {
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  document.title = t('title');
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  $('lang').textContent = t('other');
+  say(status.key, status.extra, status.bad);
+}
+
+function say(key, extra = '', bad = false) {
+  status = { key, extra, bad };
+  $('status').textContent = key ? t(key).replace('{s}', extra) + (key === 'failed' ? extra : '') : '';
+  $('status').className = bad ? 'bad' : '';
+}
+
+function toast(key, bad) {
+  const el = $('toast');
+  el.textContent = t(key);
+  el.className = 'show' + (bad ? ' bad' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = bad ? 'bad' : '', 1800);
+}
+
+// Fetched on the first call only; the browser keeps the model files for later visits.
+function loadModel() {
+  if (model) return model;
+  say('loading');
+  model = (async () => {
+    const lib = await import(LIBRARY);
+    lib.env.allowLocalModels = false;           // the model comes from the Hugging Face Hub
+    lib.env.backends.onnx.wasm.proxy = true;    // run it off the main thread, so the page stays responsive
+    const net = await lib.AutoModel.from_pretrained(MODEL, {
+      config: { model_type: 'custom' },         // the repository has no config.json for this
+      progress_callback(p) {
+        if (p.status !== 'progress' || !p.file.endsWith('.onnx')) return;
+        say('loadingFirst');
+        $('bar').hidden = false;
+        $('bar').firstElementChild.style.width = p.progress + '%';
+      },
+    });
+    const processor = await lib.AutoProcessor.from_pretrained(MODEL, {
+      config: {
+        do_normalize: true, do_pad: false, do_rescale: true, do_resize: true,
+        image_mean: [0.5, 0.5, 0.5], image_std: [1, 1, 1],
+        feature_extractor_type: 'ImageFeatureExtractor',
+        resample: 2, rescale_factor: 1 / 255, size: { width: 1024, height: 1024 },
+      },
+    });
+    $('bar').hidden = true;
+    return { lib, net, processor };
+  })();
+  model.catch(() => { model = null; $('bar').hidden = true; });  // so that the next image tries again
+  return model;
+}
+
+function show(which) {
+  view = which;
+  $('showCut').classList.toggle('on', which === 'cut');
+  $('showOriginal').classList.toggle('on', which === 'original');
+  const img = $('shown'), url = which === 'cut' && cut ? cut.url : originalUrl;
+  img.hidden = !url;
+  img.src = url;
+  img.classList.toggle('cut', which === 'cut' && !!cut);
+}
+
+function setCut(next) {
+  if (cut) URL.revokeObjectURL(cut.url);
+  cut = next;
+  for (const id of ['copy', 'save', 'showCut', 'showOriginal']) $(id).disabled = !next;
+  $('size').textContent = next ? `${next.w} × ${next.h} px` : '';
+}
+
+async function start(file) {
+  let bitmap;
+  try { bitmap = await createImageBitmap(file); }
+  catch { toast('badImage', true); return; }
+  const my = ++seq;
+  if (originalUrl) URL.revokeObjectURL(originalUrl);
+  originalUrl = URL.createObjectURL(file);
+  setCut(null);
+  $('empty').hidden = true;
+  $('stage').classList.add('busy');
+  show('original');
+  // one at a time: the model cannot run two images at once
+  queue = queue.then(() => my === seq && remove(file, bitmap, my));
+}
+
+async function remove(file, bitmap, my) {
+  let loaded;
+  try { loaded = await loadModel(); }
+  catch (err) {
+    console.error(err);
+    if (my === seq) { $('stage').classList.remove('busy'); say('loadFailed', '', true); }
+    return;
+  }
+  if (my !== seq) return;
+  say('working');
+  try {
+    const { lib, net, processor } = loaded, t0 = performance.now();
+    const image = await lib.RawImage.fromBlob(file);
+    const { pixel_values } = await processor(image);
+    const { output } = await net({ input: pixel_values });
+    const mask = await lib.RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(bitmap.width, bitmap.height);
+    if (my !== seq) return;
+
+    // the mask becomes the alpha channel of the original picture
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const g = canvas.getContext('2d');
+    g.drawImage(bitmap, 0, 0);
+    const pixels = g.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < mask.data.length; i++) pixels.data[4 * i + 3] = pixels.data[4 * i + 3] * mask.data[i] / 255;
+    g.putImageData(pixels, 0, 0);
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    if (my !== seq) return;
+
+    setCut({ blob, url: URL.createObjectURL(blob), w: canvas.width, h: canvas.height });
+    $('stage').classList.remove('busy');
+    show('cut');
+    say('done', ((performance.now() - t0) / 1000).toFixed(1));
+  } catch (err) {
+    console.error(err);
+    if (my === seq) { $('stage').classList.remove('busy'); say('failed', String(err?.message || err), true); }
+  }
+}
+
+async function copy() {
+  if (!cut) return;
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': cut.blob })]);
+    toast('copied');
+  } catch {
+    toast('copyFailed', true);
+  }
+}
+
+function save() {
+  if (!cut) return;
+  const d = new Date(), z = n => String(n).padStart(2, '0');
+  const a = document.createElement('a');
+  a.href = cut.url;
+  a.download = `nobg-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.png`;
+  a.click();
+}
+
+$('copy').onclick = copy;
+$('save').onclick = save;
+$('showCut').onclick = () => show('cut');
+$('showOriginal').onclick = () => show('original');
+$('open').onclick = $('empty').onclick = () => $('file').click();
+$('file').onchange = e => { if (e.target.files[0]) start(e.target.files[0]); e.target.value = ''; };
+$('lang').onclick = () => {
+  lang = lang === 'en' ? 'zh' : 'en';
+  try { localStorage.setItem('removebg-lang', lang); } catch {}
+  applyLang();
+};
+
+addEventListener('paste', e => {
+  const f = [...e.clipboardData.files].find(f => f.type.startsWith('image/'));
+  if (!f) { toast('noImage', true); return; }
+  e.preventDefault();
+  start(f);
+});
+
+addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragging'); });
+addEventListener('dragleave', () => document.body.classList.remove('dragging'));
+addEventListener('drop', e => {
+  e.preventDefault();
+  document.body.classList.remove('dragging');
+  const f = [...e.dataTransfer.files].find(f => f.type.startsWith('image/'));
+  if (f) start(f);
+});
+
+addEventListener('keydown', e => {
+  const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if (mod && k === 'c' && cut) {
+    e.preventDefault();
+    copy();
+  } else if (mod && k === 's') {
+    e.preventDefault();
+    save();
+  }
+});
+
+applyLang();
+// Opening the page means wanting to use it: get the model ready while the image is being fetched.
+loadModel().then(() => { if (status.key.startsWith('loading')) say('ready'); }, () => say('loadFailed', '', true));
+</script>
+</body>
+</html>
