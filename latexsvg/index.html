@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Unlisted personal tool: not linked from the homepage, not in the sitemap. -->
+<meta name="robots" content="noindex, nofollow">
+<title>LaTeX to SVG</title>
+<link rel="icon" href="icon.svg">
+<!-- Light by day, dark by night, with the homepage's own logic and toggle. -->
+<script src="../tz-coords.js"></script>
+<script src="../theme.js"></script>
+<style>
+  /* Colours follow the homepage: light by default, dark when ../theme.js sets data-theme="dark". */
+  :root {
+    color-scheme: light;
+    --bg: #ffffff; --panel: #f6f7f8; --line: #d4d4d4; --text: #000000; --muted: #666666;
+    --accent: #1772d0; --on-accent: #ffffff; --btn: #f2f2f2; --btn-hover: #e6e6e6; --bad: #c62828;
+    --mono: ui-monospace, "JetBrains Mono", Menlo, Consolas, "Noto Sans Mono", monospace;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #15181d; --panel: #1c2026; --line: #363b44; --text: #e4e6ea; --muted: #99a2ad;
+    --accent: #6ab0f3; --on-accent: #0d1117; --btn: #23272e; --btn-hover: #2c313a; --bad: #ff8080;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 system-ui, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  }
+  .page { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display: flex; align-items: center; justify-content: space-between; }
+  header div { display: flex; align-items: center; gap: 10px; }
+  h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  section { margin-top: 22px; }
+  .label { display: flex; gap: 12px; justify-content: space-between; margin-bottom: 6px; color: var(--muted); font-size: 13px; }
+
+  button {
+    font: inherit; color: var(--text); background: var(--btn);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: var(--btn-hover); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.12); }
+  /* the same Home pill as on the project pages */
+  .home-link {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px;
+    background: var(--btn); border: 1px solid var(--line); color: var(--text);
+    font-weight: 600; text-decoration: none;
+  }
+  .home-link:hover { background: var(--btn-hover); }
+  .theme-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0; border-radius: 50%;
+  }
+  .theme-toggle svg { display: block; width: 15px; height: 15px; }
+  .theme-toggle .icon-sun, [data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+  [data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+  textarea, input[type=text], input[type=number] {
+    font: 14px/1.5 var(--mono); color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px;
+  }
+  textarea { display: block; width: 100%; resize: vertical; }
+  textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  #chips { display: contents; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 34px;
+    padding: 4px 6px 4px 12px; border: 1px solid var(--line); border-radius: 8px;
+    background: #fff; color: #111; font-size: 18px; cursor: pointer;
+  }
+  .chip:hover, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .chip code { font: 12px var(--mono); color: #666; }
+  .chip .raw { font: 13px var(--mono); }
+  .chip .del {
+    all: unset; width: 18px; height: 18px; border-radius: 50%; cursor: pointer;
+    text-align: center; font-size: 15px; line-height: 18px; color: #999;
+  }
+  .chip .del:hover { background: #eee; color: #c00; }
+  #symForm {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px;
+    padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  }
+  #symForm[hidden] { display: none; }
+  #symForm input { background: var(--bg); }
+  #symTex { flex: 1 1 260px; min-width: 0; }
+  #symName { width: 150px; }
+  #symPreview { cursor: default; outline: none; padding: 4px 12px; min-width: 44px; justify-content: center; }
+  .note { flex-basis: 100%; color: var(--muted); font-size: 12px; }
+  .error { min-height: 1.5em; margin-top: 6px; color: var(--bad); font: 13px var(--mono); }
+  #symError { flex-basis: 100%; margin: 0; min-height: 0; }
+
+  .opts { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; color: var(--muted); font-size: 13px; }
+  .opts label { display: flex; align-items: center; gap: 6px; }
+  #size { width: 72px; padding: 4px 8px; }
+  .tools { margin-top: 8px; }
+  .group { display: inline-flex; align-items: center; gap: 6px; }
+  input[type=color] { width: 38px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; cursor: pointer; }
+  .pick { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 28px; padding: 0; }
+  .pick svg { width: 15px; height: 15px; }
+  .pick[hidden] { display: none; }
+
+  #preview {
+    display: flex; align-items: center; justify-content: center; min-height: 140px;
+    padding: 20px; border: 1px solid var(--line); border-radius: 8px; overflow: auto;
+    background: #fff; color: #888; font-size: 13px;
+  }
+  #preview.dark { background: #0c0d0f; }
+  #preview img { max-width: 100%; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  #dims { margin-left: auto; color: var(--muted); font-size: 13px; }
+  details { margin-top: 14px; color: var(--muted); font-size: 13px; }
+  summary { cursor: pointer; }
+  #src { margin-top: 8px; font-size: 12px; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    padding: 8px 16px; border-radius: 8px; background: #2f7d4f; color: #fff;
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  #toast.show { opacity: 1; }
+  #toast.bad { background: #a13c3c; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <a class="home-link" href="../" title="Back to Chang Luo's homepage">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10.5V20h5v-6h4v6h5v-9.5"/></svg>
+        <span data-i18n="home"></span>
+      </a>
+      <h1 data-i18n="title"></h1>
+    </div>
+    <div>
+      <button id="lang"></button>
+      <button class="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 1.6v2.6M12 19.8v2.6M4.2 4.2l1.9 1.9M17.9 17.9l1.9 1.9M1.6 12h2.6M19.8 12h2.6M4.2 19.8l1.9-1.9M17.9 6.1l1.9-1.9"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <section>
+    <div class="label"><span data-i18n="symbols"></span><span data-i18n="symbolsTip"></span></div>
+    <div class="chips">
+      <span id="chips"></span>
+      <button id="symNew" data-i18n="newSymbol"></button>
+    </div>
+    <form id="symForm" hidden>
+      <input id="symTex" type="text" spellcheck="false" autocomplete="off" data-i18n-ph="symTexPh">
+      <input id="symName" type="text" spellcheck="false" autocomplete="off" data-i18n-ph="symNamePh">
+      <span id="symPreview" class="chip"></span>
+      <button type="submit" class="primary" data-i18n="add"></button>
+      <button type="button" id="symCancel" data-i18n="cancel"></button>
+      <div class="note" data-i18n="nameNote"></div>
+      <div id="symError" class="error"></div>
+    </form>
+  </section>
+
+  <section>
+    <div class="label"><label for="tex" data-i18n="input"></label><span data-i18n="inputTip"></span></div>
+    <textarea id="tex" rows="5" spellcheck="false"></textarea>
+    <div class="opts tools">
+      <span class="group">
+        <label><span data-i18n="textColor"></span><input id="textColor" type="color"></label>
+        <button type="button" class="pick" data-for="textColor" data-i18n-title="pickTip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg></button>
+        <button type="button" id="colorize" data-i18n="colorize" data-i18n-title="colorizeTip"></button>
+      </span>
+    </div>
+  </section>
+
+  <section class="opts">
+    <label><span data-i18n="fontSize"></span><input id="size" type="number" min="4" max="400" step="1"> px</label>
+    <span class="group">
+      <label><span data-i18n="color"></span><input id="color" type="color"></label>
+      <button type="button" class="pick" data-for="color" data-i18n-title="pickTip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg></button>
+    </span>
+    <label><input id="display" type="checkbox"><span data-i18n="display"></span></label>
+  </section>
+
+  <section>
+    <div class="label"><span data-i18n="output"></span></div>
+    <div id="preview"></div>
+    <div id="error" class="error"></div>
+    <div class="row">
+      <button id="copy" class="primary" disabled data-i18n="copy"></button>
+      <button id="download" disabled data-i18n="download"></button>
+      <span id="dims"></span>
+    </div>
+    <details>
+      <summary data-i18n="source"></summary>
+      <textarea id="src" rows="8" readonly spellcheck="false"></textarea>
+    </details>
+  </section>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// English unless the other language was picked with the toggle before.
+const TEXT = {
+  en: {
+    title: 'LaTeX to SVG', other: '中文', home: 'Home',
+    symbols: 'Symbols', symbolsTip: 'Click a symbol to insert it at the cursor',
+    newSymbol: '+ New symbol', add: 'Add', cancel: 'Cancel', remove: 'Remove',
+    symTexPh: 'LaTeX, e.g. \\textcolor{red}{x}', symNamePh: 'name (optional)',
+    nameNote: 'With a name such as rx, the symbol is inserted and usable as the short command \\rx. Without one, a click inserts the LaTeX itself.',
+    emptySym: 'Type the LaTeX of the symbol first.',
+    badName: 'A name can only contain letters (a-z, A-Z).',
+    input: 'Your LaTeX equation', inputTip: 'Ctrl+Enter copies the SVG',
+    textColor: 'Text color', colorize: 'Color the selection', pickTip: 'Pick a color from the screen',
+    colorizeTip: 'Wraps the selected LaTeX in \\textcolor, in the equation or in the new symbol, whichever you used last',
+    fontSize: 'Font size', color: 'Formula color', display: 'Display style',
+    output: 'Rendered SVG', copy: 'Copy SVG', download: 'Download SVG', source: 'SVG source code',
+    copied: 'SVG copied to clipboard', copyFailed: 'Copy failed, use Download instead',
+    loading: 'Loading MathJax…', loadFailed: 'MathJax could not be loaded.', texError: 'LaTeX error',
+  },
+  zh: {
+    title: 'LaTeX 转 SVG', other: 'English', home: '主页',
+    symbols: '符号', symbolsTip: '点击符号，插入到光标位置',
+    newSymbol: '+ 新建符号', add: '添加', cancel: '取消', remove: '删除',
+    symTexPh: 'LaTeX，例如 \\textcolor{red}{x}', symNamePh: '名字（可选）',
+    nameNote: '起了名字（如 rx）后，点击会插入短命令 \\rx，也可以直接手打 \\rx；不起名字则点击时插入 LaTeX 原文。',
+    emptySym: '请先输入符号的 LaTeX。',
+    badName: '名字只能包含英文字母（a-z、A-Z）。',
+    input: 'LaTeX 公式', inputTip: 'Ctrl+Enter 复制 SVG',
+    textColor: '文字颜色', colorize: '给选中部分上色', pickTip: '从屏幕取色',
+    colorizeTip: '用 \\textcolor 包住选中的 LaTeX；作用于公式或新建符号的输入框，以最后使用的那个为准',
+    fontSize: '字号', color: '公式颜色', display: '行间公式样式',
+    output: '渲染结果（SVG）', copy: '复制 SVG', download: '下载 SVG', source: 'SVG 源码',
+    copied: 'SVG 已复制到剪贴板', copyFailed: '复制失败，请用「下载 SVG」',
+    loading: '正在加载 MathJax…', loadFailed: 'MathJax 加载失败。', texError: 'LaTeX 错误',
+  },
+};
+
+const store = {
+  get(key, fallback) {
+    try { return localStorage.getItem('latexsvg-' + key) ?? fallback; } catch { return fallback; }
+  },
+  set(key, value) {
+    try { localStorage.setItem('latexsvg-' + key, value); } catch {}
+  },
+};
+
+let lang = store.get('lang', 'en') === 'zh' ? 'zh' : 'en';
+const t = key => TEXT[lang][key];
+
+// User-made symbols: { name, tex }.  A named one is a short command (\name);
+// an unnamed one is only a snippet to click.
+let symbols = [];
+try {
+  symbols = JSON.parse(store.get('symbols', '[]'))
+    .filter(s => s && typeof s.tex === 'string')
+    .map(s => ({ name: typeof s.name === 'string' ? s.name : '', tex: s.tex }));
+} catch {}
+
+let ready = false;   // MathJax has started
+let current = null;  // { text, w, h } of the SVG on show
+let seq = 0, timer = 0, previewUrl = '', toastTimer = 0;
+
+function toast(key, bad) {
+  const el = $('toast');
+  el.textContent = t(key);
+  el.className = 'show' + (bad ? ' bad' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = bad ? 'bad' : '', 1800);
+}
+
+function applyLang() {
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  document.title = t('title');
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  for (const el of document.querySelectorAll('[data-i18n-ph]')) el.placeholder = t(el.dataset.i18nPh);
+  for (const el of document.querySelectorAll('[data-i18n-title]')) el.title = t(el.dataset.i18nTitle);
+  $('lang').textContent = t('other');
+  if (ready) renderChips();
+  else $('preview').textContent = t('loading');
+}
+
+// Replaces each named symbol (\name) by its LaTeX, the way a parameterless macro
+// expands.  Works on control words only, so "\\rx" (a line break, then rx) is left alone.
+function expand(tex, depth = 0) {
+  let out = '', i = 0;
+  while (i < tex.length) {
+    if (tex[i] !== '\\') { out += tex[i++]; continue; }
+    let j = i + 1;
+    while (j < tex.length && /[A-Za-z]/.test(tex[j])) j++;
+    if (j === i + 1) { out += tex.slice(i, i + 2); i += 2; continue; }
+    const name = tex.slice(i + 1, j), sym = symbols.find(s => s.name === name);
+    out += sym && depth < 8 ? expand(sym.tex, depth + 1) : '\\' + name;
+    i = j;
+  }
+  return out;
+}
+
+const texOptions = display => ({ display, em: 16, ex: 8, containerWidth: 1280 });
+const texError = svg => svg.querySelector('[data-mml-node="merror"]');
+
+// MathJax's SVG is meant to sit inside a web page: sized in ex, coloured by the
+// surrounding text.  Turn it into a file that stands on its own.
+function standalone(svg, fontSize, color) {
+  const pxPerEx = fontSize * (MathJax.startup.document.outputJax.font.params.x_height || 0.442);
+  const out = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), size = {};
+  for (const attr of ['width', 'height']) {
+    const value = svg.getAttribute(attr) || '', m = /^([\d.]+)ex$/.exec(value);
+    if (m) size[attr] = +(m[1] * pxPerEx).toFixed(2);
+    out.setAttribute(attr, m ? size[attr] + 'px' : value);
+  }
+  out.setAttribute('viewBox', svg.getAttribute('viewBox'));
+  out.append(...svg.childNodes);
+  const text = new XMLSerializer().serializeToString(out).replaceAll('currentColor', color);
+  return { text, w: size.width ?? '?', h: size.height ?? '?' };
+}
+
+function show(out, error = '') {
+  current = out;
+  $('copy').disabled = $('download').disabled = !out;
+  $('error').textContent = error;
+  $('src').value = out ? out.text : '';
+  $('dims').textContent = out ? `${out.w} × ${out.h} px` : '';
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = '';
+  $('preview').textContent = '';
+  if (!out) return;
+  // shown as an image of the very text that gets copied, so what you see is what you get
+  previewUrl = URL.createObjectURL(new Blob([out.text], { type: 'image/svg+xml' }));
+  const im = new Image();
+  im.src = previewUrl;
+  im.alt = '';
+  $('preview').append(im);
+}
+
+function isLight(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return (0.2126 * (n >> 16) + 0.7152 * (n >> 8 & 255) + 0.0722 * (n & 255)) / 255 > 0.6;
+}
+
+async function render() {
+  if (!ready) return;
+  const my = ++seq, tex = $('tex').value;
+  if (!tex.trim()) { show(null); return; }
+  const fontSize = Math.min(400, Math.max(4, parseFloat($('size').value) || 16)), color = $('color').value;
+  let node;
+  try {
+    node = await MathJax.tex2svgPromise(expand(tex), texOptions($('display').checked));
+  } catch (err) {
+    if (my === seq) show(null, String(err?.message || err));
+    return;
+  }
+  if (my !== seq) return;
+  const svg = node.querySelector('svg'), bad = texError(svg);
+  if (bad) { show(null, bad.getAttribute('data-mjx-error') || t('texError')); return; }
+  $('preview').classList.toggle('dark', isLight(color));
+  show(standalone(svg, fontSize, color));
+}
+
+function scheduleRender() {
+  clearTimeout(timer);
+  timer = setTimeout(render, 120);
+}
+
+async function copy() {
+  if (!current) return;
+  const text = current.text;
+  try {
+    // as text for editors and design tools, and as an SVG image for apps that take one
+    const item = { 'text/plain': new Blob([text], { type: 'text/plain' }) };
+    if (ClipboardItem.supports?.('image/svg+xml')) item['image/svg+xml'] = new Blob([text], { type: 'image/svg+xml' });
+    await navigator.clipboard.write([new ClipboardItem(item)]);
+    toast('copied');
+  } catch {
+    try { await navigator.clipboard.writeText(text); toast('copied'); }
+    catch { toast('copyFailed', true); }
+  }
+}
+
+function download() {
+  if (!current) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' + current.text], { type: 'image/svg+xml' }));
+  a.download = 'equation.svg';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// The rendered symbol for a chip, or its LaTeX as text when it is not a formula on its own.
+function symbolNode(tex) {
+  try {
+    const svg = MathJax.tex2svg(expand(tex), texOptions(false)).querySelector('svg');
+    if (!texError(svg)) return svg;
+  } catch {}
+  const raw = document.createElement('span');
+  raw.className = 'raw';
+  raw.textContent = tex;
+  return raw;
+}
+
+// Types `text` into a LaTeX field over its selection, as if by hand (so Ctrl+Z undoes it).
+function insertInto(field, text) {
+  field.focus();
+  if (document.execCommand('insertText', false, text)) return;
+  field.setRangeText(text, field.selectionStart, field.selectionEnd, 'end');
+  field.dispatchEvent(new Event('input'));
+}
+
+function insert(text) {
+  if (/\\[A-Za-z]+$/.test(text)) text += ' ';  // so that letters typed next do not join the command
+  insertInto($('tex'), text);
+}
+
+// The LaTeX field used last: the equation, or the new symbol while its form is open.
+let field = $('tex');
+for (const id of ['tex', 'symTex']) $(id).addEventListener('focus', () => field = $(id));
+$('colorize').addEventListener('pointerdown', () => {  // the button is about to take the focus away
+  if (['tex', 'symTex'].includes(document.activeElement.id)) field = document.activeElement;
+});
+
+function colorize() {
+  if ($('symForm').hidden) field = $('tex');
+  const selected = field.value.slice(field.selectionStart, field.selectionEnd);
+  insertInto(field, `\\textcolor{${$('textColor').value}}{${selected}}`);
+  if (!selected) field.setSelectionRange(field.selectionStart - 1, field.selectionStart - 1);  // between the braces
+}
+
+function renderChips() {
+  const box = $('chips');
+  box.textContent = '';
+  symbols.forEach((s, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.tabIndex = 0;
+    chip.title = s.tex;
+    chip.append(symbolNode(s.name ? '\\' + s.name : s.tex));
+    if (s.name) {
+      const code = document.createElement('code');
+      code.textContent = '\\' + s.name;
+      chip.append(code);
+    }
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.textContent = '×';
+    del.title = t('remove');
+    del.onclick = e => {
+      e.stopPropagation();
+      symbols.splice(i, 1);
+      saveSymbols();
+    };
+    chip.append(del);
+    chip.onclick = () => insert(s.name ? '\\' + s.name : s.tex);
+    chip.onkeydown = e => { if (e.key === 'Enter' && e.target === chip) chip.click(); };
+    box.append(chip);
+  });
+}
+
+function saveSymbols() {
+  store.set('symbols', JSON.stringify(symbols));
+  renderChips();
+  render();
+}
+
+function symPreview() {
+  const tex = $('symTex').value.trim();
+  $('symPreview').textContent = '';
+  if (ready && tex) $('symPreview').append(symbolNode(tex));
+}
+
+function toggleForm(open) {
+  $('symForm').hidden = !open;
+  $('symError').textContent = '';
+  if (!open) return;
+  $('symTex').value = $('symName').value = '';
+  symPreview();
+  $('symTex').focus();
+}
+
+$('symNew').onclick = () => toggleForm($('symForm').hidden);
+$('symCancel').onclick = () => toggleForm(false);
+$('symTex').oninput = symPreview;
+$('symForm').onsubmit = e => {
+  e.preventDefault();
+  const tex = $('symTex').value.trim(), name = $('symName').value.trim().replace(/^\\/, '');
+  if (!tex) { $('symError').textContent = t('emptySym'); return; }
+  if (name && !/^[A-Za-z]+$/.test(name)) { $('symError').textContent = t('badName'); return; }
+  const i = name ? symbols.findIndex(s => s.name === name) : -1;
+  if (i >= 0) symbols[i] = { name, tex };  // same name again: redefine it
+  else symbols.push({ name, tex });
+  toggleForm(false);
+  saveSymbols();
+};
+
+$('tex').oninput = () => { store.set('tex', $('tex').value); scheduleRender(); };
+$('tex').onkeydown = e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); copy(); }
+};
+for (const id of ['size', 'color', 'display']) {
+  $(id).oninput = () => {
+    store.set(id, id === 'display' ? $(id).checked : $(id).value);
+    scheduleRender();
+  };
+}
+$('textColor').oninput = () => store.set('textColor', $('textColor').value);
+$('colorize').onclick = colorize;
+for (const button of document.querySelectorAll('.pick')) {
+  if (!window.EyeDropper) { button.hidden = true; continue; }
+  button.onclick = async () => {
+    let picked;
+    try { picked = await new EyeDropper().open(); } catch { return; }  // Esc
+    $(button.dataset.for).value = picked.sRGBHex;
+    $(button.dataset.for).oninput();
+  };
+}
+$('copy').onclick = copy;
+$('download').onclick = download;
+$('lang').onclick = () => {
+  lang = lang === 'en' ? 'zh' : 'en';
+  store.set('lang', lang);
+  applyLang();
+};
+
+$('tex').value = store.get('tex', 'x = \\sin \\left( \\frac{\\pi}{2} \\right)');
+$('size').value = store.get('size', '16');
+$('color').value = store.get('color', '#000000');
+$('textColor').value = store.get('textColor', '#e03131');
+$('display').checked = store.get('display', 'true') !== 'false';
+applyLang();
+
+// Set up before the MathJax script below runs; it calls ready() once loaded.
+window.MathJax = {
+  tex: { inlineMath: [], packages: { '[-]': ['noundefined'] } },  // unknown commands are errors, not red text
+  svg: { fontCache: 'none' },                                     // plain paths, no <use>: opens in any program
+  options: { enableMenu: false },
+  startup: {
+    typeset: false,
+    ready() {
+      MathJax.startup.defaultReady();
+      MathJax.startup.promise.then(() => {
+        ready = true;
+        renderChips();
+        render();
+      });
+    },
+  },
+};
+</script>
+<script src="mathjax/tex-svg-full.js" onerror="document.getElementById('preview').textContent = t('loadFailed')"></script>
+</body>
+</html>
