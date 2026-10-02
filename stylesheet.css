@@ -469,3 +469,29 @@ tr:has(> td[style*="width:25%"]) > td:last-child { border-radius: 0 12px 12px 0;
   --card-alt: rgba(255, 255, 255, 0.035);
   --divider: rgba(255, 255, 255, 0.14);
 }
+
+/* ---- Email: the envelope icon opens the mail program, the word copies the address ---- */
+.copy-email {
+  position: relative;
+}
+
+.copy-email::after {
+  content: attr(data-copied);
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);   /* below the links, where nothing is covered */
+  z-index: 5;
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.copy-email.copied::after {
+  opacity: 1;
+}
