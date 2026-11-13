@@ -183,12 +183,16 @@
     </div>
 
     <h2 data-i18n="marginTitle"></h2>
+    <div class="field">
+      <label for="preset" data-i18n="preset"></label>
+      <select id="preset"></select>
+    </div>
     <div class="margins">
-      <span></span><input type="number" id="mt" min="0" max="50" step="0.5"><span></span>
-      <input type="number" id="ml" min="0" max="50" step="0.5">
+      <span></span><input type="number" id="mt" min="0" max="50" step="0.1"><span></span>
+      <input type="number" id="ml" min="0" max="50" step="0.1">
       <div class="paper">mm</div>
-      <input type="number" id="mr" min="0" max="50" step="0.5">
-      <span></span><input type="number" id="mb" min="0" max="50" step="0.5"><span></span>
+      <input type="number" id="mr" min="0" max="50" step="0.1">
+      <span></span><input type="number" id="mb" min="0" max="50" step="0.1"><span></span>
     </div>
     <div class="note" data-i18n="marginNote"></div>
     <div class="field">
@@ -218,6 +222,16 @@
 const $ = id => document.getElementById(id);
 const MM = 72 / 25.4;   // points per millimetre; all geometry below is in points
 const PAPERS = { A4: [210, 297], A3: [297, 420], B4: [257, 364], Letter: [215.9, 279.4] };  // mm, portrait
+// Unprintable margins in mm [top, right, bottom, left], as the printers report them over IPP
+// (media-*-margin-supported), rounded up to 0.1 mm.
+const PRESETS = {
+  safe: ['', [5, 5, 5, 5]],
+  apeos: ['FUJIFILM Apeos C320 z', [4.1, 4.1, 4.1, 4.1]],
+  l3780: ['Brother MFC-L3780CDW', [4.4, 4.4, 4.4, 4.4]],
+  b8520: ['Brother MFC-8520DN', [4.4, 4.4, 4.4, 4.4]],
+  lbp652: ['Canon LBP652C', [5, 5, 5, 5]],
+  t5100: ['EPSON SC-T5100', [3, 3.6, 3, 3.6]],
+};
 const PREVIEW_PIXELS = 2400;   // longer side of the bitmap the preview is drawn from
 
 if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -233,8 +247,8 @@ const TEXT = {
     oAuto: 'Auto', oPortrait: 'Portrait', oLandscape: 'Landscape',
     sizeTitle: 'Size', mSheets: 'Fit on sheets', mScale: 'Fixed scale',
     sheets: 'Number of sheets', scale: 'Scale of the original',
-    marginTitle: 'Printer margins & overlap',
-    marginNote: 'The strip at each paper edge your printer cannot print on. A web page cannot ask the printer for it; 5 mm is safe for most laser printers. Nothing is placed inside the margins.',
+    marginTitle: 'Printer margins & overlap', preset: 'Printer', presetSafe: 'Any printer (5 mm)', presetCustom: 'Custom',
+    marginNote: 'The strip at each paper edge your printer cannot print on. A web page cannot ask the printer for it: pick a preset or type the values; 5 mm is safe for most laser printers. Nothing is placed inside the margins.',
     overlap: 'Overlap between sheets', marks: 'Alignment marks at the overlaps', labels: 'Sheet labels (row-column)',
     resultTitle: 'Result',
     iPoster: 'Poster: {w} × {h} mm', iLayout: 'Layout: {c} × {r} sheets of {p}, {o}',
@@ -258,8 +272,8 @@ const TEXT = {
     oAuto: '自动', oPortrait: '纵向', oLandscape: '横向',
     sizeTitle: '大小', mSheets: '按张数适配', mScale: '固定比例',
     sheets: '纸张数量', scale: '相对原稿的比例',
-    marginTitle: '打印机边距与重叠',
-    marginNote: '纸张四边打印机印不到的宽度。网页无法向打印机查询这个值；大多数激光打印机填 5 mm 就够。边距内不会放任何内容。',
+    marginTitle: '打印机边距与重叠', preset: '打印机', presetSafe: '通用（5 mm）', presetCustom: '自定义',
+    marginNote: '纸张四边打印机印不到的宽度。网页无法向打印机查询这个值：请选预设或手动填写；大多数激光打印机填 5 mm 就够。边距内不会放任何内容。',
     overlap: '相邻纸张的重叠', marks: '在重叠处画对齐标记', labels: '纸张编号（行-列）',
     resultTitle: '结果',
     iPoster: '海报：{w} × {h} mm', iLayout: '排布：{c} × {r} 张 {p}，{o}',
@@ -281,7 +295,7 @@ const t = (key, vars = {}) => TEXT[lang][key].replace(/\{(\w+)\}/g, (_, k) => va
 
 // Everything the side panel holds; remembered between visits, since it describes the printer.
 const DEFAULTS = {
-  paper: 'A4', orient: 'auto', mode: 'sheets', sheets: 2, scale: 100,
+  preset: 'safe', paper: 'A4', orient: 'auto', mode: 'sheets', sheets: 2, scale: 100,
   mt: 5, mr: 5, mb: 5, ml: 5, overlap: 10, marks: true, labels: true,
 };
 const NUMBERS = ['sheets', 'scale', 'mt', 'mr', 'mb', 'ml', 'overlap'];
@@ -441,8 +455,16 @@ function update() {
 
 // ---------- settings panel ----------
 
+// The chosen preset, as long as the four margins still hold its values; otherwise "Custom".
+function currentPreset() {
+  const now = [cfg.mt, cfg.mr, cfg.mb, cfg.ml];
+  const same = key => PRESETS[key] && PRESETS[key][1].every((v, i) => v === now[i]);
+  return same(cfg.preset) ? cfg.preset : Object.keys(PRESETS).find(same) || 'custom';
+}
+
 function showSettings() {
   $('paper').value = cfg.paper;
+  $('preset').value = currentPreset();
   for (const id of NUMBERS) if (document.activeElement !== $(id)) $(id).value = cfg[id];
   $('marks').checked = cfg.marks;
   $('labels').checked = cfg.labels;
@@ -463,6 +485,9 @@ function applyLang() {
   document.title = t('title');
   for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
   $('lang').textContent = t('other');
+  $('preset').replaceChildren(...Object.entries(PRESETS).map(([key, [name]]) => new Option(name || t('presetSafe'), key)),
+                              new Option(t('presetCustom'), 'custom'));
+  $('preset').value = currentPreset();
   update();
 }
 
@@ -582,6 +607,13 @@ async function exportPdf() {
 
 // ---------- events ----------
 
+$('preset').onchange = e => {
+  const preset = PRESETS[e.target.value];
+  if (!preset) { e.target.value = currentPreset(); return; }   // "Custom" only describes typed-in values
+  cfg.preset = e.target.value;
+  [cfg.mt, cfg.mr, cfg.mb, cfg.ml] = preset[1];
+  changed();
+};
 $('paper').onchange = e => { cfg.paper = e.target.value; changed(); };
 for (const id of NUMBERS) $(id).oninput = e => {
   const el = e.target, v = parseFloat(el.value);
