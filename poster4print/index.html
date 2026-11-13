@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Unlisted personal tool: not linked from the homepage, not in the sitemap. -->
+<meta name="robots" content="noindex, nofollow">
+<title>Poster for Print</title>
+<link rel="icon" href="icon.svg">
+<!-- Light by day, dark by night, with the homepage's own logic and toggle. -->
+<script src="../tz-coords.js"></script>
+<script src="../theme.js"></script>
+<style>
+  /* Colours follow the homepage: light by default, dark when ../theme.js sets data-theme="dark". */
+  :root {
+    color-scheme: light;
+    --bg: #e8eaed; --panel: #ffffff; --line: #d4d4d4; --text: #000000; --muted: #666666;
+    --accent: #1772d0; --on-accent: #ffffff; --btn: #f2f2f2; --btn-hover: #e6e6e6; --bad: #c62828;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #101216; --panel: #15181d; --line: #363b44; --text: #e4e6ea; --muted: #99a2ad;
+    --accent: #6ab0f3; --on-accent: #0d1117; --btn: #23272e; --btn-hover: #2c313a; --bad: #ff8080;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.5 system-ui, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+    user-select: none;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header .hint { margin-left: auto; color: var(--muted); font-size: 13px; }
+  button {
+    font: inherit; color: var(--text); background: var(--btn);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: var(--btn-hover); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.12); }
+  /* the same Home pill as on the project pages */
+  .home-link {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px;
+    background: var(--btn); border: 1px solid var(--line); color: var(--text);
+    font-weight: 600; text-decoration: none;
+  }
+  .home-link:hover { background: var(--btn-hover); }
+  .theme-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0; border-radius: 50%;
+  }
+  .theme-toggle svg { display: block; width: 15px; height: 15px; }
+  .theme-toggle .icon-sun, [data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+  [data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+  .seg { display: flex; }
+  .seg button { flex: 1; border-radius: 0; padding: 4px 8px; }
+  .seg button + button { border-left: 0; }
+  .seg button:first-child { border-radius: 6px 0 0 6px; }
+  .seg button:last-child { border-radius: 0 6px 6px 0; }
+  .seg button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+  main { flex: 1; display: flex; min-height: 0; }
+  #stage { flex: 1; position: relative; min-width: 0; }
+  #view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #stage.busy #view { opacity: .4; }
+  #busy {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    padding: 8px 16px; border-radius: 8px; background: rgba(0, 0, 0, .72); color: #fff;
+  }
+  #stage:not(.busy) #busy { display: none; }
+  #empty {
+    position: absolute; inset: 20px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 6px; text-align: center;
+    border: 2px dashed var(--line); border-radius: 14px; color: var(--muted); cursor: pointer;
+  }
+  #empty[hidden] { display: none; }
+  #empty b { font-size: 20px; font-weight: 600; color: var(--text); }
+  body.dragging #stage { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  aside {
+    width: 300px; flex: none; display: flex; flex-direction: column; gap: 10px;
+    padding: 14px; background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto;
+  }
+  aside h2 { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+  aside h2:first-child { margin-top: 0; }
+  .field { display: flex; align-items: center; gap: 8px; }
+  .field > label { flex: 1; }
+  .field[hidden] { display: none; }
+  input[type=number], select {
+    font: inherit; color: var(--text); background: var(--btn);
+    border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px;
+  }
+  input[type=number] { width: 76px; text-align: right; }
+  select { width: 130px; }
+  .unit { width: 24px; color: var(--muted); font-size: 13px; }
+  /* the four margins, laid out like the sheet they belong to */
+  .margins {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; align-items: center; justify-items: center;
+  }
+  .margins .paper {
+    width: 58px; height: 40px; border: 1px solid var(--line); border-radius: 3px; background: var(--btn);
+    display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px;
+  }
+  .check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .check input { margin: 0; }
+  .note { color: var(--muted); font-size: 12px; }
+  #info { font-size: 13px; min-height: 6em; white-space: pre-line; }
+  #info.bad { color: var(--bad); }
+  #export { padding: 8px 12px; }
+  .credit { margin-top: auto; padding-top: 8px; color: var(--muted); font-size: 12px; }
+  .credit a { color: var(--accent); }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    padding: 8px 16px; border-radius: 8px; background: #2f7d4f; color: #fff;
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  #toast.show { opacity: 1; }
+  #toast.bad { background: #a13c3c; }
+</style>
+</head>
+<body>
+<header>
+  <a class="home-link" href="../" title="Back to Chang Luo's homepage">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10.5V20h5v-6h4v6h5v-9.5"/></svg>
+    <span data-i18n="home"></span>
+  </a>
+  <button id="open" data-i18n="open"></button>
+  <span class="hint" data-i18n="hint"></span>
+  <button id="lang"></button>
+  <button class="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 1.6v2.6M12 19.8v2.6M4.2 4.2l1.9 1.9M17.9 17.9l1.9 1.9M1.6 12h2.6M19.8 12h2.6M4.2 19.8l1.9-1.9M17.9 6.1l1.9-1.9"></path></svg>
+  </button>
+</header>
+<main>
+  <div id="stage">
+    <canvas id="view"></canvas>
+    <div id="busy" data-i18n="working"></div>
+    <div id="empty">
+      <b data-i18n="emptyTitle"></b>
+      <span data-i18n="emptySub"></span>
+    </div>
+  </div>
+  <aside>
+    <h2 data-i18n="paperTitle"></h2>
+    <div class="field" id="pageRow" hidden>
+      <label for="page" data-i18n="page"></label>
+      <input type="number" id="page" min="1" step="1" value="1"><span class="unit" id="pageCount"></span>
+    </div>
+    <div class="field">
+      <label for="paper" data-i18n="paper"></label>
+      <select id="paper">
+        <option value="A4">A4</option>
+        <option value="A3">A3</option>
+        <option value="B4">B4 (JIS)</option>
+        <option value="Letter">Letter</option>
+      </select>
+    </div>
+    <div class="seg" id="orient">
+      <button data-v="auto" data-i18n="oAuto"></button>
+      <button data-v="portrait" data-i18n="oPortrait"></button>
+      <button data-v="landscape" data-i18n="oLandscape"></button>
+    </div>
+
+    <h2 data-i18n="sizeTitle"></h2>
+    <div class="seg" id="mode">
+      <button data-v="sheets" data-i18n="mSheets"></button>
+      <button data-v="scale" data-i18n="mScale"></button>
+    </div>
+    <div class="field" id="sheetsRow">
+      <label for="sheets" data-i18n="sheets"></label>
+      <input type="number" id="sheets" min="1" max="100" step="1"><span class="unit"></span>
+    </div>
+    <div class="field" id="scaleRow">
+      <label for="scale" data-i18n="scale"></label>
+      <input type="number" id="scale" min="1" max="1000" step="1"><span class="unit">%</span>
+    </div>
+
+    <h2 data-i18n="marginTitle"></h2>
+    <div class="margins">
+      <span></span><input type="number" id="mt" min="0" max="50" step="0.5"><span></span>
+      <input type="number" id="ml" min="0" max="50" step="0.5">
+      <div class="paper">mm</div>
+      <input type="number" id="mr" min="0" max="50" step="0.5">
+      <span></span><input type="number" id="mb" min="0" max="50" step="0.5"><span></span>
+    </div>
+    <div class="note" data-i18n="marginNote"></div>
+    <div class="field">
+      <label for="overlap" data-i18n="overlap"></label>
+      <input type="number" id="overlap" min="0" max="50" step="1"><span class="unit">mm</span>
+    </div>
+    <label class="check"><input type="checkbox" id="marks"><span data-i18n="marks"></span></label>
+    <label class="check"><input type="checkbox" id="labels"><span data-i18n="labels"></span></label>
+
+    <h2 data-i18n="resultTitle"></h2>
+    <div id="info"></div>
+    <button id="export" class="primary" disabled data-i18n="export"></button>
+    <div class="note" data-i18n="printNote"></div>
+    <div class="credit">
+      <span data-i18n="credit"></span>
+      <a href="https://pdf-lib.js.org/" target="_blank" rel="noopener">pdf-lib</a> ·
+      <a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener">PDF.js</a>
+    </div>
+  </aside>
+</main>
+<input type="file" id="file" accept="application/pdf,.pdf" hidden>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const MM = 72 / 25.4;   // points per millimetre; all geometry below is in points
+const PAPERS = { A4: [210, 297], A3: [297, 420], B4: [257, 364], Letter: [215.9, 279.4] };  // mm, portrait
+const PREVIEW_PIXELS = 2400;   // longer side of the bitmap the preview is drawn from
+
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+// English unless the other language was picked with the toggle before.
+const TEXT = {
+  en: {
+    title: 'Poster for Print', other: '中文', home: 'Home',
+    open: 'Open PDF', hint: 'Drop a poster PDF anywhere · Ctrl+S exports',
+    emptyTitle: 'Drop a poster PDF here', emptySub: 'or click to choose a file · any page size',
+    working: 'Working…',
+    paperTitle: 'Paper', page: 'Poster page', paper: 'Paper size',
+    oAuto: 'Auto', oPortrait: 'Portrait', oLandscape: 'Landscape',
+    sizeTitle: 'Size', mSheets: 'Fit on sheets', mScale: 'Fixed scale',
+    sheets: 'Number of sheets', scale: 'Scale of the original',
+    marginTitle: 'Printer margins & overlap',
+    marginNote: 'The strip at each paper edge your printer cannot print on. A web page cannot ask the printer for it; 5 mm is safe for most laser printers. Nothing is placed inside the margins.',
+    overlap: 'Overlap between sheets', marks: 'Alignment marks at the overlaps', labels: 'Sheet labels (row-column)',
+    resultTitle: 'Result',
+    iPoster: 'Poster: {w} × {h} mm', iLayout: 'Layout: {c} × {r} sheets of {p}, {o}',
+    iScale: 'Printed at {s}% of the original', iFinal: 'Assembled poster: {w} × {h} mm',
+    iSkipped: '{n} sheet(s) would be blank and are left out',
+    portrait: 'portrait', landscape: 'landscape',
+    tooSmall: 'The margins and the overlap leave no room on the paper.',
+    tooMany: 'This needs {n} sheets, more than the limit of 400. Lower the scale.',
+    export: 'Export PDF (Ctrl+S)',
+    printNote: 'Print the exported file at 100% ("Actual size"), not "Fit to page", or the sheets will not line up.',
+    exported: 'Exported {n} sheet(s)', exportFailed: 'Export failed: ',
+    notPdf: 'This is not a PDF file', badPdf: 'Could not read this PDF', noLib: 'The PDF libraries could not be loaded. Check the connection and reload.',
+    credit: 'Runs entirely in your browser; the PDF is not uploaded. Vector content stays vector.',
+  },
+  zh: {
+    title: '海报分页打印', other: 'English', home: '主页',
+    open: '打开 PDF', hint: '把海报 PDF 拖到任意位置 · Ctrl+S 导出',
+    emptyTitle: '把海报 PDF 拖到这里', emptySub: '或点击这里选择文件 · 任意页面大小',
+    working: '处理中…',
+    paperTitle: '纸张', page: '海报所在页', paper: '纸张大小',
+    oAuto: '自动', oPortrait: '纵向', oLandscape: '横向',
+    sizeTitle: '大小', mSheets: '按张数适配', mScale: '固定比例',
+    sheets: '纸张数量', scale: '相对原稿的比例',
+    marginTitle: '打印机边距与重叠',
+    marginNote: '纸张四边打印机印不到的宽度。网页无法向打印机查询这个值；大多数激光打印机填 5 mm 就够。边距内不会放任何内容。',
+    overlap: '相邻纸张的重叠', marks: '在重叠处画对齐标记', labels: '纸张编号（行-列）',
+    resultTitle: '结果',
+    iPoster: '海报：{w} × {h} mm', iLayout: '排布：{c} × {r} 张 {p}，{o}',
+    iScale: '按原稿的 {s}% 打印', iFinal: '拼好后的海报：{w} × {h} mm',
+    iSkipped: '{n} 张会是空白，已省略',
+    portrait: '纵向', landscape: '横向',
+    tooSmall: '边距和重叠太大，纸上没有可用的空间了。',
+    tooMany: '这样需要 {n} 张纸，超过了 400 张的上限，请调低比例。',
+    export: '导出 PDF (Ctrl+S)',
+    printNote: '打印导出的文件时请选 100%（"实际大小"），不要选"适合页面"，否则各张对不齐。',
+    exported: '已导出 {n} 张', exportFailed: '导出失败：',
+    notPdf: '这不是 PDF 文件', badPdf: '无法读取这个 PDF', noLib: 'PDF 库加载失败，请检查网络后刷新。',
+    credit: '完全在浏览器本地运行，PDF 不会上传。矢量内容保持矢量。',
+  },
+};
+let lang = 'en';
+try { if (localStorage.getItem('poster4print-lang') === 'zh') lang = 'zh'; } catch {}
+const t = (key, vars = {}) => TEXT[lang][key].replace(/\{(\w+)\}/g, (_, k) => vars[k]);
+
+// Everything the side panel holds; remembered between visits, since it describes the printer.
+const DEFAULTS = {
+  paper: 'A4', orient: 'auto', mode: 'sheets', sheets: 2, scale: 100,
+  mt: 5, mr: 5, mb: 5, ml: 5, overlap: 10, marks: true, labels: true,
+};
+const NUMBERS = ['sheets', 'scale', 'mt', 'mr', 'mb', 'ml', 'overlap'];
+let cfg = { ...DEFAULTS };
+try { cfg = { ...cfg, ...JSON.parse(localStorage.getItem('poster4print-settings') || '{}') }; } catch {}
+if (!PAPERS[cfg.paper]) cfg.paper = 'A4';
+
+let poster = null;   // { name, bytes, doc (pdf.js), pages, page, w, h (points, as displayed), bitmap }
+let plan = null;     // the current layout, see makePlan
+let seq = 0;         // the newest file or page wins
+let toastTimer = 0;
+
+function toast(text, bad) {
+  const el = $('toast');
+  el.textContent = text;
+  el.className = 'show' + (bad ? ' bad' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = bad ? 'bad' : '', 2200);
+}
+
+// The layout for one paper orientation and one grid, or null when nothing fits.
+// Sheets overlap by `ov`, so c sheets of printable width W cover c·W − (c−1)·ov.
+// With `scale` unset the poster is made as large as the grid allows.
+function layout(pw, ph, paperW, paperH, m, ov, c, r, scale) {
+  const W = paperW - m.l - m.r, H = paperH - m.t - m.b;
+  if (W - ov < MM || H - ov < MM) return null;
+  const totalW = c * W - (c - 1) * ov, totalH = r * H - (r - 1) * ov;
+  const s = scale || Math.min(totalW / pw, totalH / ph);
+  return {
+    c, r, s, paperW, paperH, W, H, m, ov, totalW, totalH,
+    // where the poster sits inside the area the grid covers, measured from its top-left corner
+    x0: (totalW - pw * s) / 2, y0: (totalH - ph * s) / 2, w: pw * s, h: ph * s,
+  };
+}
+
+// Picks the paper orientation and the grid. "Fit on sheets": the grid of exactly n sheets that
+// prints the poster largest. "Fixed scale": the fewest sheets that hold the poster at that scale.
+function makePlan() {
+  if (!poster) return null;
+  const [a, b] = PAPERS[cfg.paper].map(v => v * MM);
+  const m = { t: cfg.mt * MM, r: cfg.mr * MM, b: cfg.mb * MM, l: cfg.ml * MM }, ov = cfg.overlap * MM;
+  const papers = [];
+  if (cfg.orient !== 'landscape') papers.push([a, b]);
+  if (cfg.orient !== 'portrait') papers.push([b, a]);
+  let best = null;
+  for (const [paperW, paperH] of papers) {
+    const grids = [];
+    if (cfg.mode === 'sheets') {
+      for (let c = 1; c <= cfg.sheets; c++) if (cfg.sheets % c === 0) grids.push([c, cfg.sheets / c, 0]);
+    } else {
+      const s = cfg.scale / 100, W = paperW - m.l - m.r, H = paperH - m.t - m.b;
+      if (W - ov < MM || H - ov < MM) continue;
+      const need = (len, size) => Math.max(1, Math.ceil((len * s - ov) / (size - ov) - 1e-6));
+      grids.push([need(poster.w, W), need(poster.h, H), s]);
+    }
+    for (const [c, r, s] of grids) {
+      const p = layout(poster.w, poster.h, paperW, paperH, m, ov, c, r, s);
+      if (!p) continue;
+      const better = !best || (cfg.mode === 'sheets' ? p.s > best.s + 1e-9 : c * r < best.c * best.r);
+      if (better) best = p;
+    }
+  }
+  if (!best) return { error: t('tooSmall') };
+  if (best.c * best.r > 400) return { error: t('tooMany', { n: best.c * best.r }) };
+  // the sheets in reading order; one the poster does not reach is left out
+  best.tiles = [];
+  const eps = 0.05;
+  for (let j = 0; j < best.r; j++) for (let i = 0; i < best.c; i++) {
+    const x = i * (best.W - best.ov), y = j * (best.H - best.ov);
+    const blank = x + best.W <= best.x0 + eps || x >= best.x0 + best.w - eps
+               || y + best.H <= best.y0 + eps || y >= best.y0 + best.h - eps;
+    if (!blank) best.tiles.push({ i, j, x, y });
+  }
+  return best;
+}
+
+// ---------- preview ----------
+
+function draw() {
+  const canvas = $('view'), box = $('stage').getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.round(box.width * dpr));
+  canvas.height = Math.max(1, Math.round(box.height * dpr));
+  const g = canvas.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, box.width, box.height);
+  if (!poster || !poster.bitmap || !plan || plan.error) return;
+
+  const p = plan, gap = 14, pad = 24;
+  const css = getComputedStyle(document.documentElement);
+  const accent = css.getPropertyValue('--accent').trim(), muted = css.getPropertyValue('--muted').trim();
+  // the sheets side by side, as they come out of the printer
+  const k = Math.min((box.width - 2 * pad - (p.c - 1) * gap) / (p.c * p.paperW),
+                     (box.height - 2 * pad - (p.r - 1) * gap) / (p.r * p.paperH));
+  if (k <= 0) return;
+  const left = (box.width - (p.c * p.paperW * k + (p.c - 1) * gap)) / 2;
+  const top = (box.height - (p.r * p.paperH * k + (p.r - 1) * gap)) / 2;
+  const shown = new Set(p.tiles.map(q => q.i + ',' + q.j));
+
+  for (let j = 0; j < p.r; j++) for (let i = 0; i < p.c; i++) {
+    const sx = left + i * (p.paperW * k + gap), sy = top + j * (p.paperH * k + gap);
+    const used = shown.has(i + ',' + j);
+    g.save();
+    g.globalAlpha = used ? 1 : .35;
+    g.shadowColor = 'rgba(0,0,0,.28)'; g.shadowBlur = 8; g.shadowOffsetY = 2;
+    g.fillStyle = '#fff';
+    g.fillRect(sx, sy, p.paperW * k, p.paperH * k);
+    g.restore();
+    if (!used) continue;
+
+    const ax = sx + p.m.l * k, ay = sy + p.m.t * k, aw = p.W * k, ah = p.H * k;   // printable area
+    const tx = i * (p.W - p.ov), ty = j * (p.H - p.ov);
+    g.save();
+    g.beginPath(); g.rect(ax, ay, aw, ah); g.clip();
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(poster.bitmap, ax + (p.x0 - tx) * k, ay + (p.y0 - ty) * k, p.w * k, p.h * k);
+    // the strips this sheet shares with its neighbours
+    g.fillStyle = accent; g.globalAlpha = .22;
+    const o = p.ov * k;
+    if (o > 0) {
+      if (i > 0) g.fillRect(ax, ay, o, ah);
+      if (i < p.c - 1) g.fillRect(ax + aw - o, ay, o, ah);
+      if (j > 0) g.fillRect(ax, ay, aw, o);
+      if (j < p.r - 1) g.fillRect(ax, ay + ah - o, aw, o);
+    }
+    g.restore();
+    g.save();
+    g.strokeStyle = muted; g.lineWidth = 1; g.setLineDash([4, 3]);
+    g.strokeRect(ax + .5, ay + .5, aw - 1, ah - 1);
+    g.restore();
+    g.fillStyle = muted; g.font = '12px system-ui, sans-serif'; g.textBaseline = 'bottom';
+    g.fillText(`${j + 1}-${i + 1}`, sx, sy - 2);
+  }
+}
+
+function update() {
+  plan = makePlan();
+  const info = $('info');
+  if (!plan) {
+    info.textContent = ''; info.className = '';
+  } else if (plan.error) {
+    info.textContent = plan.error; info.className = 'bad';
+  } else {
+    const mm = v => (v / MM).toFixed(0), p = plan;
+    const lines = [
+      t('iPoster', { w: mm(poster.w), h: mm(poster.h) }),
+      t('iLayout', { c: p.c, r: p.r, p: cfg.paper, o: t(p.paperW > p.paperH ? 'landscape' : 'portrait') }),
+      t('iScale', { s: (p.s * 100).toFixed(1) }),
+      t('iFinal', { w: mm(p.w), h: mm(p.h) }),
+    ];
+    const skipped = p.c * p.r - p.tiles.length;
+    if (skipped) lines.push(t('iSkipped', { n: skipped }));
+    info.textContent = lines.join('\n'); info.className = '';
+  }
+  $('export').disabled = !plan || !!plan.error;
+  draw();
+}
+
+// ---------- settings panel ----------
+
+function showSettings() {
+  $('paper').value = cfg.paper;
+  for (const id of NUMBERS) if (document.activeElement !== $(id)) $(id).value = cfg[id];
+  $('marks').checked = cfg.marks;
+  $('labels').checked = cfg.labels;
+  for (const b of $('orient').children) b.classList.toggle('on', b.dataset.v === cfg.orient);
+  for (const b of $('mode').children) b.classList.toggle('on', b.dataset.v === cfg.mode);
+  $('sheetsRow').hidden = cfg.mode !== 'sheets';
+  $('scaleRow').hidden = cfg.mode !== 'scale';
+}
+
+function changed() {
+  try { localStorage.setItem('poster4print-settings', JSON.stringify(cfg)); } catch {}
+  showSettings();
+  update();
+}
+
+function applyLang() {
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  document.title = t('title');
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  $('lang').textContent = t('other');
+  update();
+}
+
+// ---------- loading ----------
+
+async function start(file) {
+  if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) { toast(t('notPdf'), true); return; }
+  if (!window.pdfjsLib || !window.PDFLib) { toast(t('noLib'), true); return; }
+  const my = ++seq;
+  $('stage').classList.add('busy');
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    // PDF.js takes over the buffer it is given, so it gets a copy and the export keeps the original
+    const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+    if (my !== seq) return;
+    poster = { name: file.name.replace(/\.pdf$/i, ''), bytes, doc, pages: doc.numPages, page: 1 };
+    $('pageRow').hidden = doc.numPages < 2;
+    $('page').max = doc.numPages; $('page').value = 1;
+    $('pageCount').textContent = '/ ' + doc.numPages;
+    $('empty').hidden = true;
+    await showPage(my);
+  } catch (err) {
+    console.error(err);
+    if (my === seq) { $('stage').classList.remove('busy'); toast(t('badPdf'), true); }
+  }
+}
+
+// Renders the chosen page once; every change of the settings redraws from this bitmap.
+async function showPage(my) {
+  $('stage').classList.add('busy');
+  const page = await poster.doc.getPage(poster.page);
+  const base = page.getViewport({ scale: 1 });   // the page as a viewer shows it: crop box and rotation applied
+  const vp = page.getViewport({ scale: PREVIEW_PIXELS / Math.max(base.width, base.height) });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: g, viewport: vp }).promise;
+  if (my !== seq) return;
+  poster.w = base.width; poster.h = base.height; poster.bitmap = canvas;
+  $('stage').classList.remove('busy');
+  update();
+}
+
+// ---------- export ----------
+
+// One output page per sheet. The poster page is embedded once and placed on every sheet,
+// shifted and clipped to the printable area, so text and drawings stay vector.
+async function buildPdf(p) {
+  const { PDFDocument, StandardFonts, degrees, rgb, pushGraphicsState, popGraphicsState, rectangle, clip, endPath } = PDFLib;
+  const src = await PDFDocument.load(poster.bytes, { ignoreEncryption: true });
+  const srcPage = src.getPage(poster.page - 1);
+  const crop = srcPage.getCropBox(), angle = ((srcPage.getRotation().angle % 360) + 360) % 360;
+  const out = await PDFDocument.create();
+  const emb = await out.embedPage(srcPage, {
+    left: crop.x, bottom: crop.y, right: crop.x + crop.width, top: crop.y + crop.height,
+  });
+  const font = p.labelsOn ? await out.embedFont(StandardFonts.Helvetica) : null;
+  const grey = rgb(.35, .35, .35), tick = 5 * MM;
+
+  for (const q of p.tiles) {
+    const page = out.addPage([p.paperW, p.paperH]);
+    // printable area in PDF coordinates (origin bottom-left)
+    const ax = p.m.l, ay = p.m.b, top = p.paperH - p.m.t;
+    // the poster as displayed: left edge and bottom edge on this sheet
+    const x = ax + p.x0 - q.x, y = top - (p.y0 - q.y) - p.h;
+    page.pushOperators(pushGraphicsState(), rectangle(ax, ay, p.W, p.H), clip(), endPath());
+    // a page with /Rotate is embedded unrotated: turn it about its corner, then move that corner into place
+    const s = p.s, ew = crop.width * s, eh = crop.height * s;
+    const at = { 0: [x, y], 90: [x, y + ew], 180: [x + ew, y + eh], 270: [x + eh, y] }[angle] || [x, y];
+    page.drawPage(emb, { x: at[0], y: at[1], xScale: s, yScale: s, rotate: degrees(-angle) });
+    page.pushOperators(popGraphicsState());
+
+    // short ticks where the neighbouring sheet's printable area ends: lay its edge on them
+    if (p.marksOn && p.ov > 0) {
+      const line = (x1, y1, x2, y2) => page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: .5, color: grey });
+      const vertical = vx => { line(vx, ay, vx, ay + tick); line(vx, top - tick, vx, top); };
+      const horizontal = hy => { line(ax, hy, ax + tick, hy); line(ax + p.W - tick, hy, ax + p.W, hy); };
+      if (q.i > 0) vertical(ax + p.ov);
+      if (q.i < p.c - 1) vertical(ax + p.W - p.ov);
+      if (q.j > 0) horizontal(top - p.ov);
+      if (q.j < p.r - 1) horizontal(ay + p.ov);
+    }
+    if (font) {
+      const text = `${q.j + 1}-${q.i + 1}`, size = 7;
+      const tw = font.widthOfTextAtSize(text, size);
+      // on a white patch in the bottom-left corner of the printable area
+      page.drawRectangle({ x: ax, y: ay, width: tw + 6, height: size + 4, color: rgb(1, 1, 1), opacity: .8 });
+      page.drawText(text, { x: ax + 3, y: ay + 3, size, font, color: grey });
+    }
+  }
+  out.setTitle(`${poster.name} (${p.c} x ${p.r} ${cfg.paper})`);
+  return out.save();
+}
+
+async function exportPdf() {
+  if (!poster || !plan || plan.error) return;
+  $('export').disabled = true;
+  $('stage').classList.add('busy');
+  try {
+    const p = { ...plan, marksOn: cfg.marks, labelsOn: cfg.labels };
+    const bytes = await buildPdf(p);
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${poster.name}-${cfg.paper}x${p.tiles.length}.pdf`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    toast(t('exported', { n: p.tiles.length }));
+  } catch (err) {
+    console.error(err);
+    toast(t('exportFailed') + (err?.message || err), true);
+  }
+  $('stage').classList.remove('busy');
+  $('export').disabled = !plan || !!plan.error;
+}
+
+// ---------- events ----------
+
+$('paper').onchange = e => { cfg.paper = e.target.value; changed(); };
+for (const id of NUMBERS) $(id).oninput = e => {
+  const el = e.target, v = parseFloat(el.value);
+  if (!isFinite(v)) return;   // still typing
+  let n = Math.min(+el.max, Math.max(+el.min, v));
+  if (id === 'sheets') n = Math.round(n);
+  cfg[id] = n;
+  changed();
+};
+for (const id of NUMBERS) $(id).onblur = e => { e.target.value = cfg[id]; };
+$('marks').onchange = e => { cfg.marks = e.target.checked; changed(); };
+$('labels').onchange = e => { cfg.labels = e.target.checked; changed(); };
+$('orient').onclick = e => { const v = e.target.dataset.v; if (v) { cfg.orient = v; changed(); } };
+$('mode').onclick = e => { const v = e.target.dataset.v; if (v) { cfg.mode = v; changed(); } };
+$('page').onchange = e => {
+  if (!poster) return;
+  const n = Math.min(poster.pages, Math.max(1, Math.round(+e.target.value) || 1));
+  e.target.value = n;
+  if (n === poster.page) return;
+  poster.page = n;
+  const my = ++seq;
+  showPage(my).catch(err => { console.error(err); $('stage').classList.remove('busy'); toast(t('badPdf'), true); });
+};
+$('export').onclick = exportPdf;
+$('open').onclick = $('empty').onclick = () => $('file').click();
+$('file').onchange = e => { if (e.target.files[0]) start(e.target.files[0]); e.target.value = ''; };
+$('lang').onclick = () => {
+  lang = lang === 'en' ? 'zh' : 'en';
+  try { localStorage.setItem('poster4print-lang', lang); } catch {}
+  applyLang();
+};
+
+addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragging'); });
+addEventListener('dragleave', () => document.body.classList.remove('dragging'));
+addEventListener('drop', e => {
+  e.preventDefault();
+  document.body.classList.remove('dragging');
+  if (e.dataTransfer.files[0]) start(e.dataTransfer.files[0]);
+});
+addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); exportPdf(); }
+});
+new ResizeObserver(draw).observe($('stage'));
+// the preview takes two colours from the theme
+new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+showSettings();
+applyLang();
+</script>
+</body>
+</html>
