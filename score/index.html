@@ -35,11 +35,12 @@
     padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line);
   }
   header .hint { margin-left: auto; color: var(--muted); font-size: 13px; }
-  button {
+  button, a.button {
     font: inherit; color: var(--text); background: var(--btn);
     border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; cursor: pointer;
+    text-decoration: none; text-align: center;
   }
-  button:hover:not(:disabled) { background: var(--btn-hover); }
+  button:hover:not(:disabled), a.button:hover { background: var(--btn-hover); }
   button:disabled { opacity: .45; cursor: default; }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.12); }
@@ -68,7 +69,7 @@
 
   /* left: what the score was made from, the picture and the text */
   #source {
-    width: 36%; min-width: 260px; flex: none; display: flex; flex-direction: column;
+    width: 34%; min-width: 260px; flex: none; display: flex; flex-direction: column;
     background: var(--panel); border-right: 1px solid var(--line);
   }
   #source[hidden] { display: none; }
@@ -90,9 +91,25 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
   }
   #pages .page svg { display: block; width: 100%; height: auto; }
-  #pages .note, #pages .rest { cursor: pointer; }
-  /* the notes sounding right now */
+  /* the whole box of a note takes the click: the inside of a half note is empty */
+  #pages .note { cursor: pointer; pointer-events: bounding-box; }
+  /* Played once: blue. Played again in a repeat: purple. Sounding now: red. Picked for editing: green. */
+  #pages .played, #pages .played * { fill: #2f7fd0; stroke: #2f7fd0; }
+  #pages .played2, #pages .played2 * { fill: #8a4fc7; stroke: #8a4fc7; }
+  #pages .selected, #pages .selected * { fill: #0e9a55; stroke: #0e9a55; }
   #pages .playing, #pages .playing * { fill: #d5382a; stroke: #d5382a; }
+  /* the line that shows where playback is */
+  #cursor {
+    position: absolute; width: 2px; margin-left: -1px; border-radius: 1px;
+    background: #d5382a; box-shadow: 0 0 0 1px rgba(213, 56, 42, .18); pointer-events: none;
+  }
+  #cursor[hidden] { display: none; }
+  /* above the line during a repeat: which time through */
+  #cursor b {
+    position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%);
+    padding: 0 5px; border-radius: 8px; background: #8a4fc7; color: #fff; font: 600 11px/16px system-ui, sans-serif;
+  }
+  #cursor b:empty { display: none; }
   #stage.busy #pages { opacity: .4; }
   #busy {
     position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
@@ -109,29 +126,37 @@
   body.dragging #stage { outline: 2px solid var(--accent); outline-offset: -2px; }
 
   aside {
-    width: 290px; flex: none; display: flex; flex-direction: column; gap: 10px;
+    width: 300px; flex: none; display: flex; flex-direction: column; gap: 9px;
     padding: 14px; background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto;
   }
   aside h2 { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: var(--muted); }
   aside h2:first-child { margin-top: 0; }
   .field { display: flex; align-items: center; gap: 8px; }
   .field > label { flex: 1; }
-  input[type=text], select {
+  input[type=text], input[type=number], select, aside textarea {
     font: inherit; color: var(--text); background: var(--btn);
     border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px;
   }
-  input[type=text] { width: 100%; user-select: text; }
-  select { width: 130px; }
+  input[type=text], aside textarea { width: 100%; user-select: text; }
+  aside textarea { resize: vertical; min-height: 3.6em; }
+  input[type=number], select { width: 130px; }
   input[type=range] { width: 130px; accent-color: var(--accent); }
   .value { width: 44px; text-align: right; color: var(--muted); font-size: 13px; }
   aside .row { display: flex; gap: 8px; }
-  aside .row button { flex: 1; padding: 7px 6px; }
+  aside .row button, aside .row a.button { flex: 1; padding: 7px 6px; }
+  aside .row.keys { gap: 5px; }
+  aside .row.keys button { padding: 5px 0; font-size: 15px; }
+  #picked { min-height: 1.5em; font-size: 13px; }
+  .check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .check input { margin: 0; }
   #status { min-height: 3em; font-size: 13px; }
   #status.bad { color: var(--bad); }
   #bar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
   #bar[hidden] { display: none; }
   #bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
   .note-text { color: var(--muted); font-size: 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: 12px; }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; }
   .credit { margin-top: auto; padding-top: 8px; color: var(--muted); font-size: 12px; }
   .credit a { color: var(--accent); }
   /* holds the pages for the print dialog; it has to be in the page, but is never seen */
@@ -193,6 +218,10 @@
       </select>
     </div>
     <div class="field">
+      <label for="bpm" data-i18n="bpm"></label>
+      <input type="number" id="bpm" min="20" max="300" step="1" data-i18n-placeholder="bpmHint">
+    </div>
+    <div class="field">
       <label for="tempo" data-i18n="tempo"></label>
       <input type="range" id="tempo" min="40" max="160" step="5"><span class="value" id="tempoValue"></span>
     </div>
@@ -200,10 +229,32 @@
       <button id="play" class="primary" disabled></button>
       <button id="stop" disabled data-i18n="stop"></button>
     </div>
-    <div class="note-text" data-i18n="playNote"></div>
+    <div class="legend">
+      <span><i style="background:#d5382a"></i><span data-i18n="legendNow"></span></span>
+      <span><i style="background:#2f7fd0"></i><span data-i18n="legendPlayed"></span></span>
+      <span><i style="background:#8a4fc7"></i><span data-i18n="legendAgain"></span></span>
+    </div>
+    <div class="row"><a class="button" id="metronome" href="../metronome/" target="metronome" data-i18n="metronome"></a></div>
+
+    <h2 data-i18n="noteTitle"></h2>
+    <div id="picked"></div>
+    <div class="row keys">
+      <button id="flat" disabled title="♭">♭</button>
+      <button id="natural" disabled title="♮">♮</button>
+      <button id="sharp" disabled title="♯">♯</button>
+    </div>
+    <div class="row keys">
+      <button id="down2" disabled data-i18n="down2"></button>
+      <button id="down1" disabled data-i18n="down1"></button>
+      <button id="up1" disabled data-i18n="up1"></button>
+      <button id="up2" disabled data-i18n="up2"></button>
+    </div>
+    <div class="note-text" data-i18n="noteHint"></div>
 
     <h2 data-i18n="layoutTitle"></h2>
     <input type="text" id="title" data-i18n-placeholder="titleHint">
+    <input type="text" id="subtitle" data-i18n-placeholder="subtitleHint">
+    <textarea id="composer" rows="2" data-i18n-placeholder="composerHint"></textarea>
     <div class="field">
       <label for="paper" data-i18n="paper"></label>
       <select id="paper">
@@ -213,8 +264,9 @@
     </div>
     <div class="field">
       <label for="size" data-i18n="size"></label>
-      <input type="range" id="size" min="50" max="130" step="5"><span class="value" id="sizeValue"></span>
+      <input type="range" id="size" min="40" max="130" step="1"><span class="value" id="sizeValue"></span>
     </div>
+    <label class="check"><input type="checkbox" id="lines"><span data-i18n="lines"></span></label>
 
     <h2 data-i18n="exportTitle"></h2>
     <div class="row">
@@ -229,6 +281,7 @@
       <span data-i18n="credit"></span>
       <a href="https://github.com/liebharc/homr" target="_blank" rel="noopener">homr</a> (AGPL-3.0, <a href="homr/README.txt" target="_blank" data-i18n="sourceLink"></a>) ·
       <a href="https://www.verovio.org/" target="_blank" rel="noopener">Verovio</a> ·
+      <a href="https://github.com/naptha/tesseract.js" target="_blank" rel="noopener">Tesseract.js</a> ·
       <a href="https://github.com/gleitz/midi-js-soundfonts" target="_blank" rel="noopener">FluidR3 GM</a>
     </div>
   </aside>
@@ -240,35 +293,46 @@
 const $ = id => document.getElementById(id);
 
 const VEROVIO = 'https://cdn.jsdelivr.net/npm/verovio@6.4.1/dist/';
+const TESSERACT = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';
 const PDFKIT = 'https://cdn.jsdelivr.net/npm/pdfkit@0.20.2/js/pdfkit.standalone.js';
 const SVG2PDF = 'https://cdn.jsdelivr.net/npm/svg-to-pdfkit@0.1.8/source.js';
+// for titles the PDF's built-in Times cannot write: Chinese, Japanese and the like
+const CJK_FONT = 'https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@main/Serif/SubsetOTF/SC/NotoSerifSC-Regular.otf';
 // one file per instrument: every note as an MP3, from the FluidR3 General MIDI sound font
 const SOUNDS = 'https://cdn.jsdelivr.net/gh/gleitz/midi-js-soundfonts@gh-pages/FluidR3_GM/';
+const QUERY = new URLSearchParams(location.search);
 // where the recognition models are; another address can be given with ?models=
-const MODELS = new URLSearchParams(location.search).get('models') || 'models/';
+const MODELS = QUERY.get('models') || 'models/';
 const PAPERS = { A4: [210, 297], Letter: [215.9, 279.4] };   // mm
+const MARGIN = 13;                                            // mm, on all four sides
 
 // English unless the other language was picked with the toggle before.
 const TEXT = {
   en: {
     title: 'Score Reader', other: '中文', home: 'Home',
     open: 'Open', showSource: 'Source', tabPicture: 'Picture', tabText: 'Text',
-    hint: 'Ctrl+V a screenshot of sheet music · Space plays · Ctrl+S saves the PDF',
+    hint: 'Ctrl+V a picture of sheet music · Space plays · ↑ ↓ move the picked note · Ctrl+S saves the PDF',
     emptyTitle: 'Paste a picture of sheet music (Ctrl+V)',
     emptySub: 'or drop a picture here / click to choose · MusicXML, MEI and ABC files open directly',
-    statusTitle: 'Status', playTitle: 'Playback', layoutTitle: 'Layout', exportTitle: 'Export',
+    statusTitle: 'Status', playTitle: 'Playback', noteTitle: 'Picked note', layoutTitle: 'Layout', exportTitle: 'Export',
     instrument: 'Instrument', piano: 'Piano', violin: 'Violin', flute: 'Flute',
-    tempo: 'Tempo', play: 'Play', pause: 'Pause', stop: 'Stop',
-    playNote: 'Click a note to start from there.',
-    titleHint: 'Title (optional)', paper: 'Paper', size: 'Staff size',
+    bpm: 'Tempo (beats per minute)', bpmHint: 'from the score', tempo: 'Speed', play: 'Play', pause: 'Pause', stop: 'Stop',
+    legendNow: 'sounding', legendPlayed: 'played', legendAgain: 'played again (repeat)',
+    metronome: 'Metronome & tuner',
+    noNote: 'Click a note: playback starts there, and it can be changed.',
+    notEditable: 'Notes can be changed in MusicXML scores only.',
+    down2: '−1', down1: '−½', up1: '+½', up2: '+1',
+    noteHint: '♭ ♮ ♯ set the accidental; −½ +½ move by a semitone (↓ ↑), −1 +1 by a whole tone (Shift). Ctrl+Z undoes.',
+    titleHint: 'Title', subtitleHint: 'Subtitle', composerHint: 'Composer, arranger (one per line)',
+    paper: 'Paper', size: 'Staff size', lines: 'Same lines as the original',
     pdf: 'Save PDF', print: 'Print', saveSource: 'Save source', midi: 'Save MIDI',
     ready: 'Paste or drop a picture to read it, or open a score file.',
     engine: 'Loading the engraver…', engineFailed: 'The engraver could not be loaded. Check the connection and reload.',
     runtime: 'Getting the recogniser ready…',
     download: 'Downloading the recognition models (160 MB, first time only)… {x}%',
     segment: 'Looking for staves and symbols…', staffs: 'Found {x} system(s); reading them…',
-    read: 'Reading staff {x}…',
-    recognised: 'Recognised in {x} s. Compare with the picture and fix mistakes under Source → Text.',
+    read: 'Reading staff {x}…', header: 'Reading the title and the tempo…',
+    recognised: 'Recognised in {x} s. Compare with the picture; click a wrong note to fix it.',
     omrFailed: 'Recognition failed: ', needsJspi: 'Reading pictures needs a recent Chrome or Edge (version 137 or later). Score files still open.',
     shown: '{p} page(s), {n} notes.', badScore: 'This could not be read as a score: ',
     loadingSound: 'Loading the sound: {x}…', soundFailed: 'The instrument sound could not be loaded.',
@@ -281,25 +345,31 @@ const TEXT = {
   zh: {
     title: '识谱', other: 'English', home: '主页',
     open: '打开', showSource: '来源', tabPicture: '图片', tabText: '文本',
-    hint: 'Ctrl+V 粘贴乐谱截图 · 空格播放 · Ctrl+S 保存 PDF',
+    hint: 'Ctrl+V 粘贴乐谱图片 · 空格播放 · ↑ ↓ 移动选中的音符 · Ctrl+S 保存 PDF',
     emptyTitle: '粘贴一张乐谱图片 (Ctrl+V)',
     emptySub: '或把图片拖进来 / 点击选择 · MusicXML、MEI、ABC 文件可直接打开',
-    statusTitle: '状态', playTitle: '播放', layoutTitle: '版面', exportTitle: '导出',
+    statusTitle: '状态', playTitle: '播放', noteTitle: '选中的音符', layoutTitle: '版面', exportTitle: '导出',
     instrument: '乐器', piano: '钢琴', violin: '小提琴', flute: '长笛',
-    tempo: '速度', play: '播放', pause: '暂停', stop: '停止',
-    playNote: '点击某个音符可从那里开始播放。',
-    titleHint: '标题（可选）', paper: '纸张', size: '谱表大小',
+    bpm: '速度（每分钟拍数）', bpmHint: '按乐谱', tempo: '播放速率', play: '播放', pause: '暂停', stop: '停止',
+    legendNow: '正在发声', legendPlayed: '已播放', legendAgain: '反复时再次播放',
+    metronome: '节拍器和调音器',
+    noNote: '点击一个音符：从那里开始播放，也可以修改它。',
+    notEditable: '只有 MusicXML 乐谱可以修改音符。',
+    down2: '−全', down1: '−半', up1: '+半', up2: '+全',
+    noteHint: '♭ ♮ ♯ 设置升降号；−半 +半 移动半音（↓ ↑），−全 +全 移动全音（Shift）。Ctrl+Z 撤销。',
+    titleHint: '标题', subtitleHint: '副标题', composerHint: '作曲、编曲（每行一位）',
+    paper: '纸张', size: '谱表大小', lines: '每行的小节与原谱一致',
     pdf: '保存 PDF', print: '打印', saveSource: '保存源文件', midi: '保存 MIDI',
     ready: '粘贴或拖入图片即可识谱，也可以直接打开乐谱文件。',
     engine: '正在加载排版引擎…', engineFailed: '排版引擎加载失败，请检查网络后刷新。',
     runtime: '正在准备识谱程序…',
     download: '正在下载识谱模型（160 MB，仅第一次需要）… {x}%',
     segment: '正在寻找谱表和符号…', staffs: '找到 {x} 组谱表，正在逐行识别…',
-    read: '正在识别第 {x} 行…',
-    recognised: '识别完成，用时 {x} 秒。请对照图片检查，在「来源 → 文本」里改错。',
+    read: '正在识别第 {x} 行…', header: '正在读取标题和速度…',
+    recognised: '识别完成，用时 {x} 秒。请对照图片检查，点击错的音符即可修改。',
     omrFailed: '识别失败：', needsJspi: '识别图片需要较新的 Chrome 或 Edge（137 及以上）。乐谱文件仍可打开。',
     shown: '共 {p} 页，{n} 个音符。', badScore: '无法把它读成乐谱：',
-    loadingSound: '正在加载{x}音色…', soundFailed: '乐器音色加载失败。',
+    loadingSound: '正在加载音色：{x}…', soundFailed: '乐器音色加载失败。',
     makingPdf: '正在生成 PDF…', pdfFailed: '生成 PDF 失败：',
     printOpened: '这里无法直接打开打印对话框；已在新标签页打开，请在那里打印。',
     badFile: '不支持这种文件', nothing: '剪贴板里没有可读的内容',
@@ -311,7 +381,7 @@ let lang = 'en';
 try { if (localStorage.getItem('score-lang') === 'zh') lang = 'zh'; } catch {}
 const t = (key, x = '', more = {}) => TEXT[lang][key].replace(/\{(\w+)\}/g, (_, k) => k === 'x' ? x : more[k]);
 
-const DEFAULTS = { instrument: 'acoustic_grand_piano', tempo: 100, paper: 'A4', size: 100 };
+const DEFAULTS = { instrument: 'acoustic_grand_piano', tempo: 100, paper: 'A4', size: 100, lines: true };
 let cfg = { ...DEFAULTS };
 try { cfg = { ...cfg, ...JSON.parse(localStorage.getItem('score-settings') || '{}') }; } catch {}
 if (!PAPERS[cfg.paper]) cfg.paper = 'A4';
@@ -320,9 +390,15 @@ let status = { key: 'engine', x: '', more: {}, bad: false, tail: '' };   // kept
 let tk = null;          // the Verovio toolkit, once loaded
 let score = '';         // the text the score is engraved from: MusicXML, MEI or ABC
 let name = 'score';     // for the names of saved files
-let notes = [];         // { id, time, end, pitch } in milliseconds at the score's own tempo, by time
-let byId = new Map();   // the same notes by the id of their element on the page
 let shown = false;      // a score is on the page
+// What playback goes through, in the order it sounds: repeats are written out, so a note that
+// is played twice is here twice. Times are milliseconds at the score's own tempo.
+let events = [];        // { id, time, end, pitch, pass }
+let stops = [];         // the moments something starts: { time, id, pass }, for the playback line
+let total = 0;          // when the last note ends
+let position = 0;       // where playback is, or will start from
+let selected = null;    // id of the note picked for editing
+const history = [];     // earlier texts of the score, for undo
 let toastTimer = 0;
 
 function say(key, x = '', bad = false, tail = '', more = {}) {
@@ -330,6 +406,7 @@ function say(key, x = '', bad = false, tail = '', more = {}) {
   $('status').textContent = key ? t(key, x, more) + tail : '';
   $('status').className = bad ? 'bad' : '';
 }
+const sayShown = () => say('shown', '', false, '', { p: $('pages').querySelectorAll('.page').length, n: new Set(events.map(e => e.id)).size });
 
 function toast(text, bad) {
   const el = $('toast');
@@ -355,6 +432,8 @@ const engine = (async () => {
 
 const isXml = text => /^\s*</.test(text);
 const isMusicXml = text => isXml(text) && /<score-(partwise|timewise)[\s>]/.test(text);
+const parse = text => new DOMParser().parseFromString(text, 'application/xml');
+const escapeXml = v => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // Recognised scores come without beams, and jump between their voices note by note.
 // Each measure is rewritten voice after voice, with every note at the time it had, and
@@ -443,16 +522,15 @@ function tidy(doc) {
   }
 }
 
-// The recogniser writes its MusicXML on one line: laid out for reading and fixing by hand.
+// MusicXML laid out for reading and fixing by hand: the recogniser writes it on one line.
 function pretty(text) {
-  const doc = new DOMParser().parseFromString(text, 'application/xml');
-  if (doc.querySelector('parsererror')) return text;
-  const escape = v => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const doc = typeof text === 'string' ? parse(text) : text;
+  if (doc.querySelector('parsererror')) return String(text);
   const lines = ['<?xml version="1.0" encoding="UTF-8"?>'];
   const write = (el, indent) => {
-    const attrs = [...el.attributes].map(a => ` ${a.name}="${escape(a.value).replace(/"/g, '&quot;')}"`).join('');
+    const attrs = [...el.attributes].map(a => ` ${a.name}="${escapeXml(a.value).replace(/"/g, '&quot;')}"`).join('');
     const children = [...el.children], value = el.textContent.trim();
-    if (!children.length) lines.push(indent + (value ? `<${el.tagName}${attrs}>${escape(value)}</${el.tagName}>` : `<${el.tagName}${attrs}/>`));
+    if (!children.length) lines.push(indent + (value ? `<${el.tagName}${attrs}>${escapeXml(value)}</${el.tagName}>` : `<${el.tagName}${attrs}/>`));
     else {
       lines.push(`${indent}<${el.tagName}${attrs}>`);
       for (const child of children) write(child, indent + '  ');
@@ -463,83 +541,156 @@ function pretty(text) {
   return lines.join('\n') + '\n';
 }
 
-// MusicXML gets its beams and the title from the side panel; other formats pass through.
+// What the recogniser adds that the picture did not have: the name it gives the part.
+function fromPicture(xml) {
+  const doc = parse(xml);
+  if (doc.querySelector('parsererror')) return xml;
+  for (const el of doc.querySelectorAll('part-name, part-abbreviation')) el.textContent = '';
+  return pretty(doc);
+}
+
+const heading = () => ({
+  title: $('title').value.trim(), subtitle: $('subtitle').value.trim(),
+  composer: $('composer').value.split('\n').map(v => v.trim()).filter(Boolean),
+});
+
+// MusicXML as it is engraved: with beams, with a number on every note (the notes on the page
+// get the same, so a click finds its note here), and with the tempo and names from the side panel.
+// Other formats pass through.
 function prepare(text) {
   if (!isMusicXml(text)) return text;
-  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const doc = parse(text);
   if (doc.querySelector('parsererror')) return text;   // Verovio will say what is wrong with it
   tidy(doc);
-  const title = $('title').value.trim();
-  if (title) {
-    const root = doc.documentElement;
+  doc.querySelectorAll('note').forEach((el, i) => el.setAttribute('id', 'n' + i));
+  const root = doc.documentElement, { title, subtitle, composer } = heading();
+  const make = (tag, value) => { const el = doc.createElement(tag); el.textContent = value; return el; };
+  if (title || subtitle) {
     for (const el of root.querySelectorAll(':scope > work, :scope > movement-title')) el.remove();
-    const work = doc.createElement('work'), workTitle = doc.createElement('work-title');
-    workTitle.textContent = title;
-    work.append(workTitle);
-    root.prepend(work);
+    if (subtitle) root.prepend(make('movement-title', subtitle));
+    if (title) { const work = doc.createElement('work'); work.append(make('work-title', title)); root.prepend(work); }
+  }
+  const identification = root.querySelector(':scope > identification');
+  if (composer.length && identification) {
+    for (const el of identification.querySelectorAll(':scope > creator')) el.remove();
+    const creator = make('creator', composer.join(', '));
+    creator.setAttribute('type', 'composer');
+    identification.prepend(creator);
+  }
+  const bpm = +$('bpm').value, first = doc.querySelector('part > measure');
+  if (bpm >= 20 && bpm <= 300 && first) {
+    for (const el of first.querySelectorAll(':scope > direction')) if (el.querySelector('metronome')) el.remove();
+    // the beat is the dotted quarter in 6/8, 9/8 and 12/8, otherwise the quarter
+    const beats = +(first.querySelector('time > beats')?.textContent || 4), type = +(first.querySelector('time > beat-type')?.textContent || 4);
+    const dotted = type === 8 && beats % 3 === 0 && beats > 3;
+    const direction = doc.createElement('direction');
+    direction.setAttribute('placement', 'above');
+    direction.innerHTML = `<direction-type><metronome><beat-unit>quarter</beat-unit>${dotted ? '<beat-unit-dot/>' : ''}<per-minute>${bpm}</per-minute></metronome></direction-type><staff>1</staff><sound tempo="${dotted ? bpm * 1.5 : bpm}"/>`;
+    const lead = [...first.children].filter(el => el.tagName === 'attributes' || el.tagName === 'print').pop();
+    if (lead) lead.after(direction); else first.prepend(direction);
   }
   return new XMLSerializer().serializeToString(doc);
 }
 
-function options() {
+function options(ownHeader) {
   const [w, h] = PAPERS[cfg.paper];
   // Verovio lays out in tenths of a millimetre at scale 100, where a staff is 7.2 mm high;
   // a smaller scale on a page made larger by the same factor keeps the paper and shrinks the music.
-  const f = 100 / cfg.size, margin = Math.round(130 * f);
+  const f = 100 / cfg.size, margin = Math.round(MARGIN * 10 * f);
   return {
     pageWidth: Math.round(w * 10 * f), pageHeight: Math.round(h * 10 * f), scale: cfg.size,
     pageMarginLeft: margin, pageMarginRight: margin, pageMarginTop: margin, pageMarginBottom: margin,
-    adjustPageHeight: false, breaks: 'auto', header: 'auto', footer: 'none', svgViewBox: true,
+    adjustPageHeight: false, footer: 'none', svgViewBox: true,
+    header: ownHeader ? 'encoded' : 'auto',
+    // 'line' keeps the systems of the original and still fills the pages itself
+    breaks: cfg.lines && /<print\b[^>]*new-system="yes"|<sb[\s\/>]/.test(score) ? 'line' : 'auto',
   };
+}
+
+// Loads `score` into Verovio. The title, the subtitle and the composer from the side panel are set
+// at the head of the first page the way printed music has them: title and subtitle in the middle,
+// the composer below them on the right.
+function load() {
+  const { title, subtitle, composer } = heading(), own = !!(title || subtitle || composer.length);
+  tk.setOptions(options(own));
+  let ok = false;
+  try { ok = tk.loadData(prepare(score)); } catch (err) { console.error(err); }
+  if (!ok || !own) return ok;
+  const middle = [title && `<rend fontsize="x-large">${escapeXml(title)}</rend>`, subtitle && `<rend fontsize="large">${escapeXml(subtitle)}</rend>`].filter(Boolean).join('<lb/>');
+  const head = '<pgHead func="first">'
+    + (middle ? `<rend halign="center" valign="top">${middle}</rend>` : '')
+    + (composer.length ? `<rend halign="right" valign="bottom">${composer.map(escapeXml).join('<lb/>')}</rend>` : '')
+    + '</pgHead>';
+  const mei = tk.getMEI().replace(/<pgHead\b[\s\S]*?<\/pgHead>/g, '').replace(/(<scoreDef\b[^>]*>)/, '$1' + head);
+  try { return tk.loadData(mei); } catch (err) { console.error(err); return false; }
 }
 
 // Engraves `score` and puts the pages on screen. Returns false if it is not a score.
 function engrave() {
-  stopPlaying();
-  tk.setOptions(options());
-  let ok = false;
-  try { ok = tk.loadData(prepare(score)); } catch (err) { console.error(err); }
-  const count = ok ? tk.getPageCount() : 0;
-  if (!count) {
+  const wasPlaying = !!playing;
+  stopPlaying(true);
+  if (!load() || !tk.getPageCount()) {
     // keep what was on the page: a slip while typing should not blank it
     say('badScore', '', true, (tk.getLog() || '').trim().split('\n').pop().slice(0, 200));
     return false;
   }
   const pages = $('pages');
   pages.replaceChildren();
-  for (let i = 1; i <= count; i++) {
+  for (let i = 1; i <= tk.getPageCount(); i++) {
     const page = document.createElement('div');
     page.className = 'page';
     page.innerHTML = tk.renderToSVG(i);
     pages.append(page);
   }
-  // what to play: every note with its time, from Verovio's own MIDI rendering
+  const cursor = document.createElement('div');
+  cursor.id = 'cursor'; cursor.hidden = true;
+  cursor.append(document.createElement('b'));
+  pages.append(cursor);
+
+  // What to play, from Verovio's own MIDI rendering. It writes repeats out: the second time
+  // through, a note comes with "-rend2" after its id.
   tk.renderToMIDI();
-  const ids = new Set();
-  for (const event of tk.renderToTimemap()) for (const id of event.on || []) ids.add(id);
-  notes = [];
-  for (const id of ids) {
-    const v = tk.getMIDIValuesForElement(id);
-    if (v && v.duration > 0) notes.push({ id, time: v.time, end: v.time + v.duration, pitch: v.pitch });
+  events = [];
+  const open = new Map(), pitches = new Map();
+  for (const entry of tk.renderToTimemap()) {
+    for (const key of entry.off || []) {
+      const e = open.get(key);
+      if (e) { e.end = entry.tstamp; open.delete(key); }
+    }
+    for (const key of entry.on || []) {
+      const again = /^(.*)-rend(\d+)$/.exec(key), id = again ? again[1] : key;
+      if (!pitches.has(id)) pitches.set(id, tk.getMIDIValuesForElement(id)?.pitch);
+      const e = { id, time: entry.tstamp, end: entry.tstamp, pitch: pitches.get(id), pass: again ? +again[2] : 1 };
+      open.set(key, e);
+      if (e.pitch) events.push(e);
+    }
   }
-  notes.sort((a, b) => a.time - b.time);
-  byId = new Map(notes.map(n => [n.id, n]));
+  events = events.filter(e => e.end > e.time).sort((a, b) => a.time - b.time);
+  stops = [];
+  for (const e of events) if (!stops.length || stops[stops.length - 1].time !== e.time) stops.push({ time: e.time, id: e.id, pass: e.pass });
+  total = events.reduce((m, e) => Math.max(m, e.end), 0);
+  position = Math.min(position, total);
+
   shown = true;
   $('empty').hidden = true;
   for (const id of ['pdf', 'print', 'saveSource', 'midi', 'stop']) $(id).disabled = false;
-  $('play').disabled = !notes.length;
+  $('play').disabled = !events.length;
+  showPicked();
+  paint();
+  if (wasPlaying) play();
   return true;
 }
 
-// A new score: from a file, from the recogniser, or typed.
+// A new score: from a file, from the recogniser, or pasted.
 async function setScore(text) {
   await engine;
+  stopPlaying();
   score = text;
+  selected = null;
+  history.length = 0;
   $('text').value = text;
   if (engrave()) sayShown();
 }
-
-const sayShown = () => say('shown', '', false, '', { p: $('pages').children.length, n: notes.length });
 
 // ---------- the source pane ----------
 
@@ -553,11 +704,85 @@ function showSource(on, tab) {
   $('tabPicture').classList.toggle('on', tab === 'picture');
   $('tabText').classList.toggle('on', tab === 'text');
   $('tabPicture').disabled = !$('original').src;
+  placeCursor();
 }
 
 // ---------- recognition ----------
 
 let worker = null, job = 0, started = 0;
+let top = null;         // promise of what was read at the top of the picture
+let reader = null;      // promise of the OCR worker
+
+const TEMPO_WORDS = {
+  grave: 40, largo: 50, lento: 56, larghetto: 60, adagio: 70, andante: 84, andantino: 92, moderato: 108,
+  allegretto: 116, allegro: 132, vivace: 160, presto: 180, prestissimo: 200,
+};
+
+// Title, subtitle, composer and tempo, from the strip of the picture above the first staff.
+// The title is the large line in the middle and the subtitle the line under it; what stands at the
+// right edge names the composer; the tempo is a number after an equals sign (as in "♩ = 96"),
+// or else a tempo word.
+async function readHeader(png) {
+  await loadScript(TESSERACT);
+  reader ||= Tesseract.createWorker(['eng', 'chi_sim', 'jpn']);
+  reader.catch(() => { reader = null; });
+  // small print reads better enlarged
+  const small = await createImageBitmap(png), zoom = Math.min(4, Math.max(1, 2400 / small.width));
+  const canvas = document.createElement('canvas');
+  const W = canvas.width = Math.round(small.width * zoom);
+  canvas.height = Math.round(small.height * zoom);
+  const g = canvas.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(small, 0, 0, canvas.width, canvas.height);
+  const { data } = await (await reader).recognize(canvas, {}, { blocks: true });
+
+  // Words that stand together make a line; a stray mark far away on the same height does not belong.
+  const lines = [];
+  const cjk = /[\u3040-\u30ff\u3400-\u9fff]/;
+  for (const line of (data.blocks || []).flatMap(b => b.paragraphs).flatMap(p => p.lines)) {
+    const height = line.bbox.y1 - line.bbox.y0;
+    let group = [];
+    const close = () => {
+      if (group.length) lines.push({
+        text: group.reduce((text, w) => text + (text && !(cjk.test(text.slice(-1)) && cjk.test(w.text[0])) ? ' ' : '') + w.text, ''),
+        confidence: Math.min(...group.map(w => w.confidence)), height, top: line.bbox.y0,
+        left: group[0].bbox.x0, right: group[group.length - 1].bbox.x1,
+      });
+      group = [];
+    };
+    for (const word of line.words) {
+      if (!word.text.trim()) continue;
+      if (group.length && word.bbox.x0 - group[group.length - 1].bbox.x1 > 2.5 * height) close();
+      group.push(word);
+    }
+    close();
+  }
+  if (QUERY.has('debug')) console.log(JSON.stringify(lines));
+
+  const found = {};
+  const all = lines.map(l => l.text).join('\n');
+  const number = /[=＝]\s*(?:c(?:a|irca)?\.?\s*)?(\d{2,3})(?!\d)/.exec(all);
+  if (number && +number[1] >= 30 && +number[1] <= 260) found.bpm = +number[1];
+  else {
+    const word = all.toLowerCase().match(new RegExp('\\b(' + Object.keys(TEMPO_WORDS).join('|') + ')\\b'));
+    if (word) found.bpm = TEMPO_WORDS[word[1]];
+  }
+  // read with some confidence, and real words
+  const words = lines.filter(l => l.confidence > 55 && /\p{L}{2,}/u.test(l.text) && !/[=＝]\s*\d/.test(l.text));
+  const off = l => Math.abs((l.left + l.right) / 2 - W / 2) / (W / 2);   // 0 in the middle, 1 at an edge
+  const middle = words.filter(l => off(l) < .4);
+  if (middle.length) {
+    const tallest = Math.max(...middle.map(l => l.height));
+    const rank = l => .3 * l.height / tallest + .7 * (1 - off(l));
+    const title = middle.slice().sort((a, b) => rank(b) - rank(a))[0];
+    found.title = title.text;
+    const under = middle.filter(l => l !== title && l.top > title.top && l.height <= title.height).sort((a, b) => a.top - b.top)[0];
+    if (under) found.subtitle = under.text;
+  }
+  const right = words.filter(l => l.right > .72 * W && (l.left + l.right) / 2 > .6 * W && l.text !== found.title && l.text !== found.subtitle);
+  if (right.length) found.composer = right.sort((a, b) => a.top - b.top).map(l => l.text).join('\n');
+  return found;
+}
 
 function recognise(blob) {
   if (typeof WebAssembly?.Suspending !== 'function') { say('needsJspi', '', true); return; }
@@ -570,13 +795,34 @@ function recognise(blob) {
         else $('bar').hidden = true;
         say(m.stage, m.extra ?? '');
         busy(t(m.stage, m.extra ?? ''));
-      } else if (m.id === job) {
+      } else if (m.type === 'log') {
+        console.warn(m.line);
+      } else if (m.id !== job) {
+        // an older picture: nothing to do with it
+      } else if (m.type === 'header') {
+        // read while the staves are being recognised
+        top = readHeader(new Blob([m.png], { type: 'image/png' })).catch(err => { console.error(err); return {}; });
+        // the same proportions as the picture: as many staff heights across the page
+        if (m.unit > 0 && m.width > 0) {
+          const across = PAPERS[cfg.paper][0] - 2 * MARGIN;
+          cfg.size = Math.min(130, Math.max(40, Math.round(100 * (4 * m.unit / m.width) * across / 7.2)));
+          showSettings();
+        }
+      } else {
         $('bar').hidden = true;
-        busy('');
         if (m.type === 'done') {
-          const seconds = ((performance.now() - started) / 1000).toFixed(0);
-          setScore(pretty(m.xml)).then(() => { if (!status.bad) say('recognised', seconds); });
+          const mine = job;
+          (async () => {
+            if (top) { say('header'); busy(t('header')); }
+            const found = await Promise.race([top || {}, new Promise(res => setTimeout(res, 40000, {}))]);
+            if (mine !== job) return;
+            busy('');
+            for (const key of ['title', 'subtitle', 'composer', 'bpm']) if (found[key] && !$(key).value) $(key).value = found[key];
+            await setScore(fromPicture(m.xml));
+            if (!status.bad) say('recognised', ((performance.now() - started) / 1000).toFixed(0));
+          })();
         } else {
+          busy('');
           say('omrFailed', '', true, m.message);
           $('empty').hidden = shown;   // nothing to show: back to the invitation
         }
@@ -599,10 +845,17 @@ function recognise(blob) {
     showSource(true, 'picture');
     $('empty').hidden = true;
     started = performance.now();
+    top = null;
+    forget();
     say('runtime'); busy(t('runtime'));
     const image = await png.arrayBuffer();
     worker.postMessage({ id: ++job, image, models: MODELS }, [image]);
   })();
+}
+
+// the names and the tempo in the side panel belonged to the score before
+function forget() {
+  for (const id of ['title', 'subtitle', 'composer', 'bpm']) $(id).value = '';
 }
 
 async function openFile(file) {
@@ -612,14 +865,116 @@ async function openFile(file) {
     recognise(file);
   } else if (/\.(musicxml|xml|mei|abc)$/.test(lower)) {
     name = file.name.replace(/\.[^.]+$/, '');
+    forget();
     setScore(await file.text());
   } else if (lower.endsWith('.mxl')) {
     // compressed MusicXML: Verovio unpacks it; the text pane then holds its MEI
     name = file.name.replace(/\.[^.]+$/, '');
     await engine;
+    forget();
     if (tk.loadZipDataBuffer(await file.arrayBuffer())) setScore(tk.getMEI());
     else say('badScore', '', true, file.name);
   } else toast(t('badFile'), true);
+}
+
+// ---------- changing a note ----------
+
+const STEPS = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const SHARPS = 'FCGDAEB';   // the order in which key signatures add sharps; flats come in reverse
+const WITH_SHARPS = [['C', 0], ['C', 1], ['D', 0], ['D', 1], ['E', 0], ['F', 0], ['F', 1], ['G', 0], ['G', 1], ['A', 0], ['A', 1], ['B', 0]];
+const WITH_FLATS = [['C', 0], ['D', -1], ['D', 0], ['E', -1], ['E', 0], ['F', 0], ['G', -1], ['G', 0], ['A', -1], ['A', 0], ['B', -1], ['B', 0]];
+const SIGNS = { '-2': 'flat-flat', '-1': 'flat', 0: 'natural', 1: 'sharp', 2: 'double-sharp' };
+const SHOWN = { '-2': '𝄫', '-1': '♭', 0: '', 1: '♯', 2: '𝄪' };
+
+// what the key signature does to a note of this name
+const inKey = (fifths, step) => fifths > 0 && SHARPS.indexOf(step) < fifths ? 1
+  : fifths < 0 && 6 - SHARPS.indexOf(step) < -fifths ? -1 : 0;
+
+// The note of the score text that the picked note on the page stands for.
+function pickedNote(doc) {
+  const m = /^n(\d+)$/.exec(selected || '');
+  const el = m && isMusicXml(score) ? doc.querySelectorAll('note')[+m[1]] : null;
+  return el?.querySelector('pitch') ? el : null;
+}
+
+function readPitch(el) {
+  const pitch = el.querySelector('pitch');
+  return {
+    step: pitch.querySelector('step').textContent.trim(),
+    alter: Math.round(+(pitch.querySelector('alter')?.textContent || 0)),
+    octave: +pitch.querySelector('octave').textContent,
+  };
+}
+
+// The key signature in force at a measure.
+function keyAt(measure) {
+  let fifths = 0;
+  for (const m of measure.parentElement.children) {
+    const key = m.querySelector(':scope > attributes > key > fifths');
+    if (key) fifths = +key.textContent || 0;
+    if (m === measure) break;
+  }
+  return fifths;
+}
+
+// Moves the picked note by semitones, or sets its accidental. The accidentals printed in its
+// measure are then worked out again: a sign where a note differs from the key signature or from
+// the same note earlier in the measure, and none where it does not.
+function change(how) {
+  const doc = parse(score), el = pickedNote(doc);
+  if (!el) { if (selected) toast(t('notEditable'), true); return; }
+  const doc0 = score, measure = el.closest('measure'), fifths = keyAt(measure);
+  let { step, alter, octave } = readPitch(el);
+  if ('set' in how) alter = how.set;
+  else {
+    const midi = 12 * (octave + 1) + STEPS[step] + alter + how.by;
+    // spelled the way the key leans: with sharps in sharp keys, with flats in flat keys
+    [step, alter] = (fifths < 0 ? WITH_FLATS : WITH_SHARPS)[((midi % 12) + 12) % 12];
+    octave = Math.floor(midi / 12) - 1;
+  }
+  const pitch = el.querySelector('pitch');
+  pitch.querySelector('step').textContent = step;
+  pitch.querySelector('octave').textContent = octave;
+  pitch.querySelector('alter')?.remove();
+  if (alter) { const a = doc.createElement('alter'); a.textContent = alter; pitch.querySelector('step').after(a); }
+
+  const state = new Map();
+  for (const note of measure.querySelectorAll(':scope > note')) {
+    if (!note.querySelector('pitch')) continue;
+    const p = readPitch(note), key = (note.querySelector('staff')?.textContent || '1') + p.step + p.octave;
+    const before = state.has(key) ? state.get(key) : inKey(fifths, p.step);
+    note.querySelector(':scope > accidental')?.remove();
+    // a note tied from the one before keeps that note's sign
+    if (p.alter !== before && !note.querySelector('tie[type="stop"]')) {
+      const sign = doc.createElement('accidental');
+      sign.textContent = SIGNS[p.alter] || 'natural';
+      note.insertBefore(sign, note.querySelector(':scope > time-modification, :scope > stem, :scope > notehead, :scope > staff, :scope > beam, :scope > notations, :scope > lyric'));
+    }
+    state.set(key, p.alter);
+  }
+  history.push(doc0);
+  if (history.length > 200) history.shift();
+  score = pretty(doc);
+  $('text').value = score;
+  if (engrave()) sayShown();
+  blip(12 * (octave + 1) + STEPS[step] + alter);
+}
+
+function undo() {
+  if (!history.length) return;
+  score = history.pop();
+  $('text').value = score;
+  if (engrave()) sayShown();
+}
+
+// What is picked, in words and on the page.
+function showPicked() {
+  for (const el of $('pages').querySelectorAll('.selected')) el.classList.remove('selected');
+  if (selected) document.getElementById(selected)?.classList.add('selected');
+  const el = selected && isMusicXml(score) ? pickedNote(parse(score)) : null;
+  if (el) { const p = readPitch(el); $('picked').textContent = p.step + SHOWN[p.alter] + p.octave; }
+  else $('picked').textContent = t(selected && !isMusicXml(score) ? 'notEditable' : 'noNote');
+  for (const id of ['flat', 'natural', 'sharp', 'down2', 'down1', 'up1', 'up2']) $(id).disabled = !el;
 }
 
 // ---------- playback ----------
@@ -627,8 +982,7 @@ async function openFile(file) {
 let audio = null;
 const sounds = new Map();      // instrument -> promise of Map(pitch -> base64 MP3)
 const buffers = new Map();     // instrument + pitch -> promise of AudioBuffer
-let playing = null;            // { t0, from, rate, voices, timer, frame, next, lit }
-let position = 0;              // where playback starts from, in score milliseconds
+let playing = null;            // { t0, from, rate, voices, frame }
 
 const NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 
@@ -647,7 +1001,7 @@ function loadSound(instrument) {
   return sounds.get(instrument);
 }
 
-// Only the pitches the score uses are decoded.
+// Only the pitches that are asked for are decoded.
 async function loadBuffers(instrument, pitches) {
   const map = await loadSound(instrument);
   await Promise.all([...pitches].map(pitch => {
@@ -660,31 +1014,103 @@ async function loadBuffers(instrument, pitches) {
   }));
 }
 
-function light(id, on) {
-  document.getElementById(id)?.classList.toggle('playing', on);
+// One note of the instrument from `at` until `until`, on the audio clock.
+function voice(buffer, at, until) {
+  const piano = cfg.instrument === 'acoustic_grand_piano';
+  const src = audio.createBufferSource(), gain = audio.createGain();
+  src.buffer = buffer;
+  gain.gain.setValueAtTime(piano ? .55 : .4, at);
+  // a piano key lets go slowly, a bow or a breath stops at once
+  gain.gain.setTargetAtTime(0, until, piano ? .12 : .04);
+  src.connect(gain).connect(audio.destination);
+  src.start(at);
+  src.stop(until + (piano ? .8 : .3));
+  return { src, gain };
 }
 
-function stopPlaying(keepPosition) {
+// The sound of a note that was just changed, if the instrument is already there.
+async function blip(pitch) {
+  if (!audio || !sounds.has(cfg.instrument) || playing) return;
+  try {
+    await loadBuffers(cfg.instrument, [pitch]);
+    const buffer = await buffers.get(cfg.instrument + pitch);
+    if (buffer) voice(buffer, audio.currentTime, audio.currentTime + .45);
+  } catch {}
+}
+
+const now = () => playing ? Math.max(0, playing.from + (audio.currentTime - playing.t0) * 1000 * playing.rate) : position;
+
+// Colours every note for the moment `at`: sounding, played, played again in a repeat, or not yet.
+// A note that comes twice shows how far it has got: purple only once its second time is over.
+function paint(at = now()) {
+  const state = new Map();   // id -> 'playing' | 'played' | 'played2'
+  for (const e of events) {
+    if (e.time > at) break;
+    if (e.end > at) state.set(e.id, 'playing');
+    else if (state.get(e.id) !== 'playing') state.set(e.id, e.pass > 1 ? 'played2' : 'played');
+  }
+  const idle = !playing && at <= 0;
+  for (const el of $('pages').querySelectorAll('.playing, .played, .played2')) {
+    if (idle || !state.has(el.id)) el.classList.remove('playing', 'played', 'played2');
+  }
+  if (!idle) for (const [id, cls] of state) {
+    const el = document.getElementById(id);
+    if (el && !el.classList.contains(cls)) { el.classList.remove('playing', 'played', 'played2'); el.classList.add(cls); }
+  }
+  placeCursor(at);
+}
+
+// Puts the playback line where the music is at the moment `at`: at a note when one starts,
+// gliding to the next one in between. It stays on the page while playback is paused.
+function placeCursor(at = now()) {
+  const cursor = $('cursor');
+  if (!cursor) return;
+  if (!stops.length || (!playing && at <= 0 && !selected)) { cursor.hidden = true; return; }
+  let k = 0;
+  while (k + 1 < stops.length && stops[k + 1].time <= at) k++;
+  const a = stops[k], b = stops[k + 1];
+  const head = id => { const el = document.getElementById(id); return el && (el.querySelector('.notehead') || el).getBoundingClientRect(); };
+  const system = document.getElementById(a.id)?.closest('.system');
+  const ra = head(a.id);
+  if (!ra || !system) { cursor.hidden = true; return; }
+  const box = system.getBoundingClientRect(), view = $('pages').getBoundingClientRect();
+  const until = b ? b.time : total, share = until > a.time ? Math.min(1, Math.max(0, (at - a.time) / (until - a.time))) : 0;
+  // towards the next note if it is in the same system, otherwise towards the end of this one
+  const rb = b && document.getElementById(b.id)?.closest('.system') === system ? head(b.id) : null;
+  const to = rb && rb.left > ra.left ? rb.left : box.right;
+  cursor.hidden = false;
+  cursor.style.left = (ra.left + (to - ra.left) * share - view.left + $('pages').scrollLeft) + 'px';
+  cursor.style.top = (box.top - view.top + $('pages').scrollTop - 6) + 'px';
+  cursor.style.height = (box.height + 12) + 'px';
+  cursor.firstElementChild.textContent = a.pass > 1 ? a.pass + '×' : '';
+  // keep the system that is sounding on screen
+  if (playing && (box.bottom > view.bottom - 10 || box.top < view.top)) {
+    $('pages').scrollBy({ top: box.top - view.top - 60, behavior: 'smooth' });
+  }
+}
+
+// Stops the sound. Paused, the line and the colours stay where they are; stopped, they go.
+function stopPlaying(pause) {
   if (playing) {
     cancelAnimationFrame(playing.frame);
-    if (keepPosition) position = Math.max(0, playing.from + (audio.currentTime - playing.t0) * 1000 * playing.rate);
+    position = Math.min(total, now());
     for (const v of playing.voices) { try { v.gain.gain.cancelScheduledValues(0); v.gain.gain.setTargetAtTime(0, audio.currentTime, .02); v.src.stop(audio.currentTime + .15); } catch {} }
-    for (const id of playing.lit) light(id, false);
     playing = null;
   }
-  if (!keepPosition) position = 0;
+  if (!pause) position = 0;
   $('play').textContent = t('play');
+  paint();
 }
 
 async function play() {
   if (playing) { stopPlaying(true); return; }
-  if (!notes.length) return;
+  if (!events.length) return;
   audio ||= new AudioContext();
   await audio.resume();
   const instrument = cfg.instrument;
   try {
     if (!sounds.has(instrument)) say('loadingSound', t(instrument === 'acoustic_grand_piano' ? 'piano' : instrument));
-    await loadBuffers(instrument, new Set(notes.map(n => n.pitch)));
+    await loadBuffers(instrument, new Set(events.map(e => e.pitch)));
     if (status.key === 'loadingSound') sayShown();
   } catch (err) {
     console.error(err);
@@ -692,55 +1118,24 @@ async function play() {
     return;
   }
   if (playing) return;
-  if (position >= notes[notes.length - 1].end) position = 0;
+  if (position >= total) position = 0;
   const rate = cfg.tempo / 100, t0 = audio.currentTime + .08, from = position;
-  const piano = instrument === 'acoustic_grand_piano';
   const voices = [];
-  let first = notes.findIndex(n => n.time >= from - 1);
-  if (first < 0) first = notes.length;
-  for (let i = first; i < notes.length; i++) {
-    const n = notes[i], buffer = await buffers.get(instrument + n.pitch);
-    if (!buffer) continue;
-    const at = t0 + (n.time - from) / 1000 / rate, until = t0 + (n.end - from) / 1000 / rate;
-    const src = audio.createBufferSource(), gain = audio.createGain();
-    src.buffer = buffer;
-    gain.gain.setValueAtTime(piano ? .55 : .4, at);
-    // a piano key lets go slowly, a bow or a breath stops at once
-    gain.gain.setTargetAtTime(0, until, piano ? .12 : .04);
-    src.connect(gain).connect(audio.destination);
-    src.start(at);
-    src.stop(until + (piano ? .8 : .3));
-    voices.push({ src, gain });
+  for (const e of events) {
+    if (e.time < from - 1) continue;
+    const buffer = await buffers.get(instrument + e.pitch);
+    if (buffer) voices.push(voice(buffer, t0 + (e.time - from) / 1000 / rate, t0 + (e.end - from) / 1000 / rate));
   }
-  playing = { t0, from, rate, voices, next: first, lit: new Set(), frame: 0 };
+  playing = { t0, from, rate, voices, frame: 0 };
   $('play').textContent = t('pause');
   const tick = () => {
     if (!playing) return;
-    const now = playing.from + (audio.currentTime - playing.t0) * 1000 * playing.rate;
-    let newest = null;
-    while (playing.next < notes.length && notes[playing.next].time <= now) {
-      const n = notes[playing.next++];
-      playing.lit.add(n.id); light(n.id, true); newest = n.id;
-    }
-    for (const id of playing.lit) {
-      const n = byId.get(id);
-      if (n && n.end <= now) { playing.lit.delete(id); light(id, false); }
-    }
-    if (newest) follow(newest);
-    if (now > notes[notes.length - 1].end + 300) { stopPlaying(); return; }
+    const at = now();
+    if (at > total + 300) { stopPlaying(); return; }
+    paint(at);
     playing.frame = requestAnimationFrame(tick);
   };
   playing.frame = requestAnimationFrame(tick);
-}
-
-// Keeps the system that is sounding on screen.
-function follow(id) {
-  const el = document.getElementById(id)?.closest('.system');
-  if (!el) return;
-  const box = el.getBoundingClientRect(), view = $('pages').getBoundingClientRect();
-  if (box.bottom > view.bottom - 20 || box.top < view.top) {
-    $('pages').scrollBy({ top: box.top - view.top - 60, behavior: 'smooth' });
-  }
 }
 
 // ---------- export ----------
@@ -762,19 +1157,78 @@ function download(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
+let cjkFont = null;
+
 // The engraved pages as a vector PDF: Verovio's SVG is drawn into the PDF, not rasterised.
 async function makePdf() {
   await Promise.all([loadScript(PDFKIT), loadScript(SVG2PDF)]);
   const [w, h] = PAPERS[cfg.paper].map(mm => mm * 72 / 25.4);
-  const doc = new PDFDocument({ autoFirstPage: false, compress: true, info: { Title: $('title').value.trim() || name } });
+  const doc = new PDFDocument({ autoFirstPage: false, compress: true, info: { Title: heading().title || name } });
   const chunks = [];
   doc.on('data', c => chunks.push(c));
   const ended = new Promise(res => doc.on('end', res));
-  tk.setOptions(options());
-  for (let i = 1; i <= tk.getPageCount(); i++) {
-    doc.addPage({ size: [w, h], margin: 0 });
-    SVGtoPDF(doc, tk.renderToSVG(i), 0, 0, { width: w, height: h, preserveAspectRatio: 'xMinYMin meet' });
+  const pages = [];
+  for (let i = 1; i <= tk.getPageCount(); i++) pages.push(tk.renderToSVG(i));
+
+  // Music signs inside text (the note of a tempo mark) are set in the music font, which Verovio
+  // carries inside its SVG. The PDF library does not draw that font as text, so the outlines of
+  // these signs are taken from the font and drawn as shapes.
+  let music = null, musicName = '';
+  const face = /font-family:\s*'([^']+)';\s*src:\s*url\(data:application\/font-woff2;charset=utf-8;base64,([^)]+)\)/.exec(pages[0]);
+  if (face) {
+    try {
+      doc.registerFont(face[1], Uint8Array.from(atob(face[2]), c => c.charCodeAt(0)).buffer);
+      doc.font(face[1]);
+      music = doc._font.font; musicName = face[1];
+      doc.font('Times-Roman');
+    } catch (err) { console.error(err); music = null; }
   }
+  const outline = page => {
+    for (const span of page.querySelectorAll('tspan[font-family]')) {
+      if (!music || !span.getAttribute('font-family').includes(musicName) || !span.textContent.trim()) continue;
+      const k = parseFloat(span.getAttribute('font-size')) / music.unitsPerEm;
+      const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      let { x, y } = span.getStartPositionOfChar(0);
+      for (const ch of span.textContent) {
+        const glyph = music.glyphForCodePoint(ch.codePointAt(0));
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', glyph.path.toSVG());
+        path.setAttribute('transform', `translate(${x}, ${y}) scale(${k}, ${-k})`);
+        path.setAttribute('style', 'stroke: none');
+        group.append(path);
+        x += glyph.advanceWidth * k;
+      }
+      span.closest('text').after(group);
+    }
+  };
+  // Words outside Latin script need a font that has them.
+  let words = '';
+  const text = pages.join('').replace(/<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, '');
+  if (/[\u0370-\u1fff\u2e80-\ud7ff\uf900-\uffef]/.test(text)) {
+    try {
+      cjkFont ||= fetch(CJK_FONT).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+      doc.registerFont('Words', await cjkFont);
+      words = 'Words';
+    } catch (err) { console.error(err); cjkFont = null; }
+  }
+  const fontCallback = (family, bold, italic) => {
+    if (music && family.includes(musicName)) return musicName;
+    if (words) return words;
+    return bold && italic ? 'Times-BoldItalic' : bold ? 'Times-Bold' : italic ? 'Times-Italic' : 'Times-Roman';
+  };
+  // Verovio's SVG leans on its own style sheet (what is hidden, what is stroked): each page is
+  // put into the document, out of sight, so that the PDF is drawn from the styles in force.
+  const bench = document.createElement('div');
+  bench.style.cssText = 'position: fixed; left: -100000px; top: 0; width: 2100px; color: #000';
+  document.body.append(bench);
+  try {
+    for (const svg of pages) {
+      bench.innerHTML = svg;
+      try { outline(bench); } catch (err) { console.error(err); }
+      doc.addPage({ size: [w, h], margin: 0 });
+      SVGtoPDF(doc, bench.firstElementChild, 0, 0, { width: w, height: h, preserveAspectRatio: 'xMinYMin meet', useCSS: true, fontCallback });
+    }
+  } finally { bench.remove(); }
   doc.end();
   await ended;
   return new Blob(chunks, { type: 'application/pdf' });
@@ -810,8 +1264,8 @@ const printPdf = () => withPdf(blob => new Promise(done => {
 function saveSource() {
   if (!shown) return;
   const ext = isMusicXml(score) ? 'musicxml' : isXml(score) ? 'mei' : 'abc';
-  // MusicXML is saved as engraved, with its beams and title
-  download(new Blob([prepare(score)], { type: 'text/plain' }), `${name}.${ext}`);
+  // MusicXML is saved as engraved, with its beams, names and tempo
+  download(new Blob([isMusicXml(score) ? pretty(prepare(score)) : score], { type: 'text/plain' }), `${name}.${ext}`);
 }
 
 function saveMidi() {
@@ -827,6 +1281,7 @@ function showSettings() {
   $('tempo').value = cfg.tempo; $('tempoValue').textContent = cfg.tempo + '%';
   $('paper').value = cfg.paper;
   $('size').value = cfg.size; $('sizeValue').textContent = cfg.size + '%';
+  $('lines').checked = cfg.lines;
 }
 function saveSettings() {
   try { localStorage.setItem('score-settings', JSON.stringify(cfg)); } catch {}
@@ -841,6 +1296,7 @@ function applyLang() {
   $('lang').textContent = t('other');
   $('play').textContent = t(playing ? 'pause' : 'play');
   say(status.key, status.x, status.bad, status.tail, status.more);
+  showPicked();
 }
 
 let typing = 0, relayout = 0;
@@ -855,7 +1311,8 @@ const later = () => {
   clearTimeout(relayout);
   relayout = setTimeout(() => { if (shown && engrave()) sayShown(); }, 250);
 };
-$('title').oninput = later;
+$('title').oninput = $('subtitle').oninput = $('composer').oninput = $('bpm').oninput = later;
+$('lines').onchange = e => { cfg.lines = e.target.checked; saveSettings(); later(); };
 $('paper').onchange = e => { cfg.paper = e.target.value; saveSettings(); later(); };
 $('size').oninput = e => { cfg.size = +e.target.value; saveSettings(); later(); };
 $('tempo').oninput = e => {
@@ -868,6 +1325,15 @@ $('instrument').onchange = e => {
 };
 $('play').onclick = play;
 $('stop').onclick = () => stopPlaying();
+$('flat').onclick = () => change({ set: -1 });
+$('natural').onclick = () => change({ set: 0 });
+$('sharp').onclick = () => change({ set: 1 });
+$('down2').onclick = () => change({ by: -2 });
+$('down1').onclick = () => change({ by: -1 });
+$('up1').onclick = () => change({ by: 1 });
+$('up2').onclick = () => change({ by: 2 });
+// the metronome opens at the tempo of the score
+$('metronome').onclick = e => { const bpm = +$('bpm').value; e.currentTarget.href = '../metronome/' + (bpm ? '?bpm=' + bpm : ''); };
 $('pdf').onclick = savePdf;
 $('print').onclick = printPdf;
 $('saveSource').onclick = saveSource;
@@ -883,15 +1349,18 @@ $('lang').onclick = () => {
   applyLang();
 };
 
-// a click on a note starts playback there
+// A click on a note picks it: playback is moved there, and the note can be changed.
 $('pages').onclick = e => {
-  const el = e.target.closest?.('.note, .rest, .chord');
-  // a chord is one element around its notes
-  const n = el && (byId.get(el.id) || notes.find(x => el.querySelector('#' + CSS.escape(x.id))));
-  if (!n) return;
-  stopPlaying();
-  position = n.time;
-  play();
+  const el = e.target.closest?.('.note');
+  if (!el) return;
+  const first = events.find(x => x.id === el.id);
+  const wasPlaying = !!playing;
+  stopPlaying(true);
+  selected = el.id;
+  if (first) position = first.time;
+  showPicked();
+  paint();
+  if (wasPlaying) play();
 };
 
 const inField = () => /^(TEXTAREA|INPUT|SELECT)$/.test(document.activeElement?.tagName || '');
@@ -902,7 +1371,7 @@ addEventListener('paste', e => {
   const text = e.clipboardData.getData('text/plain');
   if (image) { e.preventDefault(); name = 'score'; recognise(image); }
   // score text pasted onto the page: MusicXML, MEI or ABC
-  else if (/^\s*(<\?xml|<score-|<mei|X:\s*\d)/.test(text)) { e.preventDefault(); name = 'score'; setScore(text); }
+  else if (/^\s*(<\?xml|<score-|<mei|X:\s*\d)/.test(text)) { e.preventDefault(); name = 'score'; forget(); setScore(text); }
   else toast(t('nothing'), true);
 });
 
@@ -918,8 +1387,15 @@ addEventListener('keydown', e => {
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
   if (mod && k === 's') { e.preventDefault(); savePdf(); }
   else if (mod && k === 'p' && shown) { e.preventDefault(); printPdf(); }
-  else if (k === ' ' && !mod && !inField() && shown) { e.preventDefault(); play(); }
+  else if (inField() || !shown) return;
+  else if (mod && k === 'z') { e.preventDefault(); undo(); }
+  else if (k === ' ' && !mod) { e.preventDefault(); play(); }
+  else if ((k === 'arrowup' || k === 'arrowdown') && selected && !mod) {
+    e.preventDefault();
+    change({ by: (k === 'arrowup' ? 1 : -1) * (e.shiftKey ? 2 : 1) });
+  }
 });
+new ResizeObserver(() => placeCursor()).observe($('stage'));
 
 showSettings();
 showSource(false);
@@ -927,7 +1403,10 @@ applyLang();
 engine.then(() => { if (status.key === 'engine') say('ready'); }, err => { console.error(err); say('engineFailed', '', true); });
 
 // for trying things out from the console
-window.scoreReader = { setScore, recognise, makePdf, pretty, get notes() { return notes; }, get status() { return status; } };
+window.scoreReader = {
+  setScore, recognise, makePdf, readHeader, change, play,
+  get events() { return events; }, get status() { return status; }, get position() { return now(); }, get score() { return score; },
+};
 </script>
 </body>
 </html>

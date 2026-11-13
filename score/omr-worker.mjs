@@ -25,6 +25,7 @@ const buffers = new Map();   // model name -> bytes, until its session exists
 const sessions = new Map();  // model name -> promise of its index in `list`
 const list = [];
 let loaded = 0;
+let current = 0;             // the id of the image being read
 
 const say = (stage, extra) => postMessage({ type: 'stage', stage, extra });
 
@@ -57,6 +58,8 @@ async function fetchModel(name) {
 
 // What the stand-in onnxruntime module calls.
 const bridge = {
+  // the strip of the picture above the first staff, where the title and the tempo are
+  header(png, unit, width) { postMessage({ type: 'header', id: current, png: png.slice().buffer, unit, width }); },
   tensor: (type, data, dims) => new ort.Tensor(type, data, Array.from(dims)),
   create(name) {
     if (!sessions.has(name)) sessions.set(name, (async () => {
@@ -79,7 +82,8 @@ const bridge = {
 // homr reports its progress on stderr; the lines that mark a new stage are passed on.
 function onLog(line) {
   let m;
-  if (/Starting Inference/.test(line)) say('segment');
+  if (/^header:/.test(line)) postMessage({ type: 'log', line });
+  else if (/Starting Inference/.test(line)) say('segment');
   else if ((m = /Found (\d+) connected staffs/.exec(line))) say('staffs', +m[1]);
   else if ((m = /Running TrOmr inference on staff image (\d+)/.exec(line))) say('read', +m[1] + 1);
 }
@@ -108,14 +112,37 @@ function setUp() {
     await py.runPythonAsync(`
 import sys
 sys.path.insert(0, '/omr')
+from concurrent.futures import Future
+import cv2
+import omr_js
+from pyodide.ffi import to_js
+import homr.main
 from homr.main import process_image, ProcessingConfig
 from homr.music_xml_generator import XmlGeneratorArguments
+
+# homr reads the title with an OCR package that does not run here. Its hook is used to hand
+# the part of the picture above the first staff to the page, which reads title and tempo itself.
+def header(debug, top_staff):
+    try:
+        top = int(top_staff.min_y)
+        if top >= 30:
+            ok, png = cv2.imencode('.png', debug.original_image[:top, :])
+            if ok:
+                # with the size of the staff, so that the page can engrave at the same proportions
+                omr_js.header(to_js(png.tobytes()), float(top_staff.average_unit_size), float(top_staff.max_x - top_staff.min_x))
+    except Exception as e:
+        print('header:', e, file=sys.stderr)
+    nothing = Future()
+    nothing.set_result('')
+    return nothing
+
+homr.main.detect_title = header
 
 def recognise():
     config = ProcessingConfig(
         enable_debug=False, enable_cache=False, write_staff_positions=False, read_staff_positions=False,
         selected_staff=-1, transformer_use_gpu=False, segnet_use_gpu=False, coreml_encoder=False,
-        title_detection=False,
+        title_detection=True,
     )
     process_image('/work/page.png', config, XmlGeneratorArguments())
     with open('/work/page.musicxml', encoding='utf-8') as f:
@@ -135,6 +162,7 @@ onmessage = e => {
   queue = queue.then(async () => {
     try {
       const py = await setUp();
+      current = id;
       py.FS.writeFile('/work/page.png', new Uint8Array(image));
       const recognise = py.globals.get('recognise');
       // callPromising lets the Python code wait for the models, which run asynchronously
