@@ -111,7 +111,10 @@
   .note { color: var(--muted); font-size: 12px; }
   #info { font-size: 13px; min-height: 6em; white-space: pre-line; }
   #info.bad { color: var(--bad); }
-  #export { padding: 8px 12px; }
+  aside .row { display: flex; gap: 8px; }
+  aside .row button { flex: 1; padding: 8px 6px; }
+  /* holds the sheets for the print dialog; it has to be in the page, but is never seen */
+  #printFrame { position: fixed; right: 0; bottom: 0; width: 0; height: 0; border: 0; visibility: hidden; }
   .credit { margin-top: auto; padding-top: 8px; color: var(--muted); font-size: 12px; }
   .credit a { color: var(--accent); }
 
@@ -204,7 +207,10 @@
 
     <h2 data-i18n="resultTitle"></h2>
     <div id="info"></div>
-    <button id="export" class="primary" disabled data-i18n="export"></button>
+    <div class="row">
+      <button id="print" class="primary" disabled data-i18n="print"></button>
+      <button id="export" disabled data-i18n="export"></button>
+    </div>
     <div class="note" data-i18n="printNote"></div>
     <div class="credit">
       <span data-i18n="credit"></span>
@@ -240,7 +246,7 @@ if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdel
 const TEXT = {
   en: {
     title: 'Poster for Print', other: '中文', home: 'Home',
-    open: 'Open PDF', hint: 'Drop a poster PDF anywhere · Ctrl+S exports',
+    open: 'Open PDF', hint: 'Drop a poster PDF anywhere · Ctrl+P prints · Ctrl+S saves',
     emptyTitle: 'Drop a poster PDF here', emptySub: 'or click to choose a file · any page size',
     working: 'Working…',
     paperTitle: 'Paper', page: 'Poster page', paper: 'Paper size',
@@ -257,15 +263,16 @@ const TEXT = {
     portrait: 'portrait', landscape: 'landscape',
     tooSmall: 'The margins and the overlap leave no room on the paper.',
     tooMany: 'This needs {n} sheets, more than the limit of 400. Lower the scale.',
-    export: 'Export PDF (Ctrl+S)',
-    printNote: 'Print the exported file at 100% ("Actual size"), not "Fit to page", or the sheets will not line up.',
+    print: 'Print (Ctrl+P)', export: 'Save PDF (Ctrl+S)',
+    printNote: 'Print at 100% ("Actual size" or "Default" scale), not "Fit to page", or the sheets will not line up. Pick the paper size chosen above.',
+    printFailed: 'Printing failed: ', printOpened: 'The print dialog could not be opened here; the sheets are in a new tab, print from there.',
     exported: 'Exported {n} sheet(s)', exportFailed: 'Export failed: ',
     notPdf: 'This is not a PDF file', badPdf: 'Could not read this PDF', noLib: 'The PDF libraries could not be loaded. Check the connection and reload.',
     credit: 'Runs entirely in your browser; the PDF is not uploaded. Vector content stays vector.',
   },
   zh: {
     title: '海报分页打印', other: 'English', home: '主页',
-    open: '打开 PDF', hint: '把海报 PDF 拖到任意位置 · Ctrl+S 导出',
+    open: '打开 PDF', hint: '把海报 PDF 拖到任意位置 · Ctrl+P 打印 · Ctrl+S 保存',
     emptyTitle: '把海报 PDF 拖到这里', emptySub: '或点击这里选择文件 · 任意页面大小',
     working: '处理中…',
     paperTitle: '纸张', page: '海报所在页', paper: '纸张大小',
@@ -282,8 +289,9 @@ const TEXT = {
     portrait: '纵向', landscape: '横向',
     tooSmall: '边距和重叠太大，纸上没有可用的空间了。',
     tooMany: '这样需要 {n} 张纸，超过了 400 张的上限，请调低比例。',
-    export: '导出 PDF (Ctrl+S)',
-    printNote: '打印导出的文件时请选 100%（"实际大小"），不要选"适合页面"，否则各张对不齐。',
+    print: '打印 (Ctrl+P)', export: '保存 PDF (Ctrl+S)',
+    printNote: '打印时缩放请选 100%（"实际大小"或"默认"），不要选"适合页面"，否则各张对不齐。纸张选上面设定的大小。',
+    printFailed: '打印失败：', printOpened: '这里无法直接打开打印对话框；已在新标签页打开分好的页面，请在那里打印。',
     exported: '已导出 {n} 张', exportFailed: '导出失败：',
     notPdf: '这不是 PDF 文件', badPdf: '无法读取这个 PDF', noLib: 'PDF 库加载失败，请检查网络后刷新。',
     credit: '完全在浏览器本地运行，PDF 不会上传。矢量内容保持矢量。',
@@ -449,7 +457,7 @@ function update() {
     if (skipped) lines.push(t('iSkipped', { n: skipped }));
     info.textContent = lines.join('\n'); info.className = '';
   }
-  $('export').disabled = !plan || !!plan.error;
+  $('export').disabled = $('print').disabled = !plan || !!plan.error;
   draw();
 }
 
@@ -579,30 +587,70 @@ async function buildPdf(p) {
       page.drawText(text, { x: ax + 3, y: ay + 3, size, font, color: grey });
     }
   }
+  // ask the print dialog not to rescale the sheets
+  out.catalog.getOrCreateViewerPreferences().setPrintScaling(PDFLib.PrintScaling.None);
   out.setTitle(`${poster.name} (${p.c} x ${p.r} ${cfg.paper})`);
   return out.save();
 }
 
-async function exportPdf() {
-  if (!poster || !plan || plan.error) return;
-  $('export').disabled = true;
+// Builds the sheets and hands them to `use`, with the stage dimmed meanwhile.
+async function withSheets(failKey, use) {
+  if (!poster || !plan || plan.error || $('stage').classList.contains('busy')) return;
+  $('export').disabled = $('print').disabled = true;
   $('stage').classList.add('busy');
   try {
     const p = { ...plan, marksOn: cfg.marks, labelsOn: cfg.labels };
     const bytes = await buildPdf(p);
-    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    await use(URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })), p);
+  } catch (err) {
+    console.error(err);
+    toast(t(failKey) + (err?.message || err), true);
+  }
+  $('stage').classList.remove('busy');
+  $('export').disabled = $('print').disabled = !plan || !!plan.error;
+}
+
+function exportPdf() {
+  return withSheets('exportFailed', (url, p) => {
     const a = document.createElement('a');
     a.href = url;
     a.download = `${poster.name}-${cfg.paper}x${p.tiles.length}.pdf`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     toast(t('exported', { n: p.tiles.length }));
-  } catch (err) {
-    console.error(err);
-    toast(t('exportFailed') + (err?.message || err), true);
-  }
-  $('stage').classList.remove('busy');
-  $('export').disabled = !plan || !!plan.error;
+  });
+}
+
+// Straight to the print dialog, nothing saved: the sheets are loaded into a hidden frame,
+// whose PDF viewer is then asked to print.
+let printUrl = '';
+function printPdf() {
+  return withSheets('printFailed', url => new Promise(done => {
+    $('printFrame')?.remove();
+    if (printUrl) URL.revokeObjectURL(printUrl);
+    printUrl = url;
+    const frame = document.createElement('iframe');
+    frame.id = 'printFrame';
+    let asked = false;
+    const ask = () => {
+      if (asked) return;
+      asked = true;
+      try {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      } catch (err) {
+        // a browser that shows PDFs outside the page: let its own viewer do the printing
+        console.error(err);
+        window.open(url, '_blank');
+        toast(t('printOpened'), true);
+      }
+      done();
+    };
+    // the viewer needs a moment after the frame has loaded before it can print
+    frame.onload = () => setTimeout(ask, 400);
+    frame.src = url;
+    document.body.append(frame);
+  }));
 }
 
 // ---------- events ----------
@@ -638,6 +686,7 @@ $('page').onchange = e => {
   showPage(my).catch(err => { console.error(err); $('stage').classList.remove('busy'); toast(t('badPdf'), true); });
 };
 $('export').onclick = exportPdf;
+$('print').onclick = printPdf;
 $('open').onclick = $('empty').onclick = () => $('file').click();
 $('file').onchange = e => { if (e.target.files[0]) start(e.target.files[0]); e.target.value = ''; };
 $('lang').onclick = () => {
@@ -654,7 +703,11 @@ addEventListener('drop', e => {
   if (e.dataTransfer.files[0]) start(e.dataTransfer.files[0]);
 });
 addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); exportPdf(); }
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const k = e.key.toLowerCase();
+  if (k === 's') { e.preventDefault(); exportPdf(); }
+  // printing this page itself would be of no use: Ctrl+P prints the sheets
+  else if (k === 'p' && poster) { e.preventDefault(); printPdf(); }
 });
 new ResizeObserver(draw).observe($('stage'));
 // the preview takes two colours from the theme
