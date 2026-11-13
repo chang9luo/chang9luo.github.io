@@ -1,0 +1,933 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Unlisted personal tool: not linked from the homepage, not in the sitemap. -->
+<meta name="robots" content="noindex, nofollow">
+<title>Score Reader</title>
+<link rel="icon" href="icon.svg">
+<!-- Light by day, dark by night, with the homepage's own logic and toggle. -->
+<script src="../tz-coords.js"></script>
+<script src="../theme.js"></script>
+<style>
+  /* Colours follow the homepage: light by default, dark when ../theme.js sets data-theme="dark". */
+  :root {
+    color-scheme: light;
+    --bg: #e8eaed; --panel: #ffffff; --line: #d4d4d4; --text: #000000; --muted: #666666;
+    --accent: #1772d0; --on-accent: #ffffff; --btn: #f2f2f2; --btn-hover: #e6e6e6; --bad: #c62828;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #101216; --panel: #15181d; --line: #363b44; --text: #e4e6ea; --muted: #99a2ad;
+    --accent: #6ab0f3; --on-accent: #0d1117; --btn: #23272e; --btn-hover: #2c313a; --bad: #ff8080;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.5 system-ui, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+    user-select: none;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header .hint { margin-left: auto; color: var(--muted); font-size: 13px; }
+  button {
+    font: inherit; color: var(--text); background: var(--btn);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: var(--btn-hover); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.12); }
+  button.on, button.on:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  /* the same Home pill as on the project pages */
+  .home-link {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px;
+    background: var(--btn); border: 1px solid var(--line); color: var(--text);
+    font-weight: 600; text-decoration: none;
+  }
+  .home-link:hover { background: var(--btn-hover); }
+  .theme-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0; border-radius: 50%;
+  }
+  .theme-toggle svg { display: block; width: 15px; height: 15px; }
+  .theme-toggle .icon-sun, [data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+  [data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+  .seg { display: flex; }
+  .seg button { flex: 1; border-radius: 0; padding: 4px 8px; }
+  .seg button + button { border-left: 0; }
+  .seg button:first-child { border-radius: 6px 0 0 6px; }
+  .seg button:last-child { border-radius: 0 6px 6px 0; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+
+  /* left: what the score was made from, the picture and the text */
+  #source {
+    width: 36%; min-width: 260px; flex: none; display: flex; flex-direction: column;
+    background: var(--panel); border-right: 1px solid var(--line);
+  }
+  #source[hidden] { display: none; }
+  #source .seg { padding: 8px; }
+  #picture { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 8px; }
+  #picture img { display: block; width: 100%; background: #fff; }
+  #picture[hidden], #text[hidden] { display: none; }
+  #text {
+    flex: 1; min-height: 0; margin: 0 8px 8px; padding: 8px; resize: none;
+    font: 12px/1.45 ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace;
+    color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+    white-space: pre; user-select: text;
+  }
+
+  #stage { flex: 1; position: relative; min-width: 0; }
+  #pages { position: absolute; inset: 0; overflow: auto; padding: 20px; }
+  #pages .page {
+    max-width: 900px; margin: 0 auto 20px; background: #fff; color: #000;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
+  }
+  #pages .page svg { display: block; width: 100%; height: auto; }
+  #pages .note, #pages .rest { cursor: pointer; }
+  /* the notes sounding right now */
+  #pages .playing, #pages .playing * { fill: #d5382a; stroke: #d5382a; }
+  #stage.busy #pages { opacity: .4; }
+  #busy {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    padding: 8px 16px; border-radius: 8px; background: rgba(0, 0, 0, .72); color: #fff; text-align: center;
+  }
+  #stage:not(.busy) #busy { display: none; }
+  #empty {
+    position: absolute; inset: 20px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 6px; text-align: center;
+    border: 2px dashed var(--line); border-radius: 14px; color: var(--muted); cursor: pointer;
+  }
+  #empty[hidden] { display: none; }
+  #empty b { font-size: 20px; font-weight: 600; color: var(--text); }
+  body.dragging #stage { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  aside {
+    width: 290px; flex: none; display: flex; flex-direction: column; gap: 10px;
+    padding: 14px; background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto;
+  }
+  aside h2 { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+  aside h2:first-child { margin-top: 0; }
+  .field { display: flex; align-items: center; gap: 8px; }
+  .field > label { flex: 1; }
+  input[type=text], select {
+    font: inherit; color: var(--text); background: var(--btn);
+    border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px;
+  }
+  input[type=text] { width: 100%; user-select: text; }
+  select { width: 130px; }
+  input[type=range] { width: 130px; accent-color: var(--accent); }
+  .value { width: 44px; text-align: right; color: var(--muted); font-size: 13px; }
+  aside .row { display: flex; gap: 8px; }
+  aside .row button { flex: 1; padding: 7px 6px; }
+  #status { min-height: 3em; font-size: 13px; }
+  #status.bad { color: var(--bad); }
+  #bar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  #bar[hidden] { display: none; }
+  #bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .note-text { color: var(--muted); font-size: 12px; }
+  .credit { margin-top: auto; padding-top: 8px; color: var(--muted); font-size: 12px; }
+  .credit a { color: var(--accent); }
+  /* holds the pages for the print dialog; it has to be in the page, but is never seen */
+  #printFrame { position: fixed; right: 0; bottom: 0; width: 0; height: 0; border: 0; visibility: hidden; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    padding: 8px 16px; border-radius: 8px; background: #2f7d4f; color: #fff;
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  #toast.show { opacity: 1; }
+  #toast.bad { background: #a13c3c; }
+</style>
+</head>
+<body>
+<header>
+  <a class="home-link" href="../" title="Back to Chang Luo's homepage">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10.5V20h5v-6h4v6h5v-9.5"/></svg>
+    <span data-i18n="home"></span>
+  </a>
+  <button id="open" data-i18n="open"></button>
+  <button id="showSource" data-i18n="showSource"></button>
+  <span class="hint" data-i18n="hint"></span>
+  <button id="lang"></button>
+  <button class="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 1.6v2.6M12 19.8v2.6M4.2 4.2l1.9 1.9M17.9 17.9l1.9 1.9M1.6 12h2.6M19.8 12h2.6M4.2 19.8l1.9-1.9M17.9 6.1l1.9-1.9"></path></svg>
+  </button>
+</header>
+<main>
+  <section id="source" hidden>
+    <div class="seg">
+      <button id="tabPicture" data-i18n="tabPicture"></button>
+      <button id="tabText" data-i18n="tabText"></button>
+    </div>
+    <div id="picture"><img id="original" alt=""></div>
+    <textarea id="text" spellcheck="false" hidden></textarea>
+  </section>
+  <div id="stage">
+    <div id="pages"></div>
+    <div id="busy"></div>
+    <div id="empty">
+      <b data-i18n="emptyTitle"></b>
+      <span data-i18n="emptySub"></span>
+    </div>
+  </div>
+  <aside>
+    <h2 data-i18n="statusTitle"></h2>
+    <div id="status"></div>
+    <div id="bar" hidden><i></i></div>
+
+    <h2 data-i18n="playTitle"></h2>
+    <div class="field">
+      <label for="instrument" data-i18n="instrument"></label>
+      <select id="instrument">
+        <option value="acoustic_grand_piano" data-i18n="piano"></option>
+        <option value="violin" data-i18n="violin"></option>
+        <option value="flute" data-i18n="flute"></option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="tempo" data-i18n="tempo"></label>
+      <input type="range" id="tempo" min="40" max="160" step="5"><span class="value" id="tempoValue"></span>
+    </div>
+    <div class="row">
+      <button id="play" class="primary" disabled></button>
+      <button id="stop" disabled data-i18n="stop"></button>
+    </div>
+    <div class="note-text" data-i18n="playNote"></div>
+
+    <h2 data-i18n="layoutTitle"></h2>
+    <input type="text" id="title" data-i18n-placeholder="titleHint">
+    <div class="field">
+      <label for="paper" data-i18n="paper"></label>
+      <select id="paper">
+        <option value="A4">A4</option>
+        <option value="Letter">Letter</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="size" data-i18n="size"></label>
+      <input type="range" id="size" min="50" max="130" step="5"><span class="value" id="sizeValue"></span>
+    </div>
+
+    <h2 data-i18n="exportTitle"></h2>
+    <div class="row">
+      <button id="pdf" class="primary" disabled data-i18n="pdf"></button>
+      <button id="print" disabled data-i18n="print"></button>
+    </div>
+    <div class="row">
+      <button id="saveSource" disabled data-i18n="saveSource"></button>
+      <button id="midi" disabled data-i18n="midi"></button>
+    </div>
+    <div class="credit">
+      <span data-i18n="credit"></span>
+      <a href="https://github.com/liebharc/homr" target="_blank" rel="noopener">homr</a> (AGPL-3.0, <a href="homr/README.txt" target="_blank" data-i18n="sourceLink"></a>) ·
+      <a href="https://www.verovio.org/" target="_blank" rel="noopener">Verovio</a> ·
+      <a href="https://github.com/gleitz/midi-js-soundfonts" target="_blank" rel="noopener">FluidR3 GM</a>
+    </div>
+  </aside>
+</main>
+<input type="file" id="file" accept="image/*,.musicxml,.mxl,.xml,.mei,.abc" hidden>
+<div id="toast"></div>
+
+<script type="module">
+const $ = id => document.getElementById(id);
+
+const VEROVIO = 'https://cdn.jsdelivr.net/npm/verovio@6.4.1/dist/';
+const PDFKIT = 'https://cdn.jsdelivr.net/npm/pdfkit@0.20.2/js/pdfkit.standalone.js';
+const SVG2PDF = 'https://cdn.jsdelivr.net/npm/svg-to-pdfkit@0.1.8/source.js';
+// one file per instrument: every note as an MP3, from the FluidR3 General MIDI sound font
+const SOUNDS = 'https://cdn.jsdelivr.net/gh/gleitz/midi-js-soundfonts@gh-pages/FluidR3_GM/';
+// where the recognition models are; another address can be given with ?models=
+const MODELS = new URLSearchParams(location.search).get('models') || 'models/';
+const PAPERS = { A4: [210, 297], Letter: [215.9, 279.4] };   // mm
+
+// English unless the other language was picked with the toggle before.
+const TEXT = {
+  en: {
+    title: 'Score Reader', other: '中文', home: 'Home',
+    open: 'Open', showSource: 'Source', tabPicture: 'Picture', tabText: 'Text',
+    hint: 'Ctrl+V a screenshot of sheet music · Space plays · Ctrl+S saves the PDF',
+    emptyTitle: 'Paste a picture of sheet music (Ctrl+V)',
+    emptySub: 'or drop a picture here / click to choose · MusicXML, MEI and ABC files open directly',
+    statusTitle: 'Status', playTitle: 'Playback', layoutTitle: 'Layout', exportTitle: 'Export',
+    instrument: 'Instrument', piano: 'Piano', violin: 'Violin', flute: 'Flute',
+    tempo: 'Tempo', play: 'Play', pause: 'Pause', stop: 'Stop',
+    playNote: 'Click a note to start from there.',
+    titleHint: 'Title (optional)', paper: 'Paper', size: 'Staff size',
+    pdf: 'Save PDF', print: 'Print', saveSource: 'Save source', midi: 'Save MIDI',
+    ready: 'Paste or drop a picture to read it, or open a score file.',
+    engine: 'Loading the engraver…', engineFailed: 'The engraver could not be loaded. Check the connection and reload.',
+    runtime: 'Getting the recogniser ready…',
+    download: 'Downloading the recognition models (160 MB, first time only)… {x}%',
+    segment: 'Looking for staves and symbols…', staffs: 'Found {x} system(s); reading them…',
+    read: 'Reading staff {x}…',
+    recognised: 'Recognised in {x} s. Compare with the picture and fix mistakes under Source → Text.',
+    omrFailed: 'Recognition failed: ', needsJspi: 'Reading pictures needs a recent Chrome or Edge (version 137 or later). Score files still open.',
+    shown: '{p} page(s), {n} notes.', badScore: 'This could not be read as a score: ',
+    loadingSound: 'Loading the sound: {x}…', soundFailed: 'The instrument sound could not be loaded.',
+    makingPdf: 'Making the PDF…', pdfFailed: 'The PDF could not be made: ',
+    printOpened: 'The print dialog could not be opened here; the pages are in a new tab, print from there.',
+    badFile: 'This file type is not supported', nothing: 'Nothing to read in the clipboard',
+    credit: 'Runs entirely in your browser; nothing is uploaded. Recognition makes mistakes: check the result.',
+    sourceLink: 'source',
+  },
+  zh: {
+    title: '识谱', other: 'English', home: '主页',
+    open: '打开', showSource: '来源', tabPicture: '图片', tabText: '文本',
+    hint: 'Ctrl+V 粘贴乐谱截图 · 空格播放 · Ctrl+S 保存 PDF',
+    emptyTitle: '粘贴一张乐谱图片 (Ctrl+V)',
+    emptySub: '或把图片拖进来 / 点击选择 · MusicXML、MEI、ABC 文件可直接打开',
+    statusTitle: '状态', playTitle: '播放', layoutTitle: '版面', exportTitle: '导出',
+    instrument: '乐器', piano: '钢琴', violin: '小提琴', flute: '长笛',
+    tempo: '速度', play: '播放', pause: '暂停', stop: '停止',
+    playNote: '点击某个音符可从那里开始播放。',
+    titleHint: '标题（可选）', paper: '纸张', size: '谱表大小',
+    pdf: '保存 PDF', print: '打印', saveSource: '保存源文件', midi: '保存 MIDI',
+    ready: '粘贴或拖入图片即可识谱，也可以直接打开乐谱文件。',
+    engine: '正在加载排版引擎…', engineFailed: '排版引擎加载失败，请检查网络后刷新。',
+    runtime: '正在准备识谱程序…',
+    download: '正在下载识谱模型（160 MB，仅第一次需要）… {x}%',
+    segment: '正在寻找谱表和符号…', staffs: '找到 {x} 组谱表，正在逐行识别…',
+    read: '正在识别第 {x} 行…',
+    recognised: '识别完成，用时 {x} 秒。请对照图片检查，在「来源 → 文本」里改错。',
+    omrFailed: '识别失败：', needsJspi: '识别图片需要较新的 Chrome 或 Edge（137 及以上）。乐谱文件仍可打开。',
+    shown: '共 {p} 页，{n} 个音符。', badScore: '无法把它读成乐谱：',
+    loadingSound: '正在加载{x}音色…', soundFailed: '乐器音色加载失败。',
+    makingPdf: '正在生成 PDF…', pdfFailed: '生成 PDF 失败：',
+    printOpened: '这里无法直接打开打印对话框；已在新标签页打开，请在那里打印。',
+    badFile: '不支持这种文件', nothing: '剪贴板里没有可读的内容',
+    credit: '完全在浏览器本地运行，不会上传任何内容。识别会出错，请检查结果。',
+    sourceLink: '源码',
+  },
+};
+let lang = 'en';
+try { if (localStorage.getItem('score-lang') === 'zh') lang = 'zh'; } catch {}
+const t = (key, x = '', more = {}) => TEXT[lang][key].replace(/\{(\w+)\}/g, (_, k) => k === 'x' ? x : more[k]);
+
+const DEFAULTS = { instrument: 'acoustic_grand_piano', tempo: 100, paper: 'A4', size: 100 };
+let cfg = { ...DEFAULTS };
+try { cfg = { ...cfg, ...JSON.parse(localStorage.getItem('score-settings') || '{}') }; } catch {}
+if (!PAPERS[cfg.paper]) cfg.paper = 'A4';
+
+let status = { key: 'engine', x: '', more: {}, bad: false, tail: '' };   // kept so it can be re-translated
+let tk = null;          // the Verovio toolkit, once loaded
+let score = '';         // the text the score is engraved from: MusicXML, MEI or ABC
+let name = 'score';     // for the names of saved files
+let notes = [];         // { id, time, end, pitch } in milliseconds at the score's own tempo, by time
+let byId = new Map();   // the same notes by the id of their element on the page
+let shown = false;      // a score is on the page
+let toastTimer = 0;
+
+function say(key, x = '', bad = false, tail = '', more = {}) {
+  status = { key, x, more, bad, tail };
+  $('status').textContent = key ? t(key, x, more) + tail : '';
+  $('status').className = bad ? 'bad' : '';
+}
+
+function toast(text, bad) {
+  const el = $('toast');
+  el.textContent = text;
+  el.className = 'show' + (bad ? ' bad' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = bad ? 'bad' : '', 2200);
+}
+
+function busy(text) {
+  $('busy').textContent = text || '';
+  $('stage').classList.toggle('busy', !!text);
+}
+
+// ---------- engraving ----------
+
+const engine = (async () => {
+  const [{ default: createModule }, { VerovioToolkit }] = await Promise.all([
+    import(VEROVIO + 'verovio-module.mjs'), import(VEROVIO + 'verovio.mjs'),
+  ]);
+  tk = new VerovioToolkit(await createModule());
+})();
+
+const isXml = text => /^\s*</.test(text);
+const isMusicXml = text => isXml(text) && /<score-(partwise|timewise)[\s>]/.test(text);
+
+// Recognised scores come without beams, and jump between their voices note by note.
+// Each measure is rewritten voice after voice, with every note at the time it had, and
+// in each voice neighbouring eighths and shorter notes inside one beat are joined by a beam.
+// A score that has beams of its own is left as it is.
+function tidy(doc) {
+  if (doc.querySelector('beam')) return;
+  const SHORT = new Set(['eighth', '16th', '32nd', '64th', '128th']);
+  const make = (tag, text) => { const el = doc.createElement(tag); if (text !== undefined) el.textContent = text; return el; };
+  for (const part of doc.querySelectorAll('part')) {
+    let divisions = 1, beats = 4, beatType = 4;
+    for (const measure of part.children) {
+      if (measure.tagName !== 'measure') continue;
+      const before = [], after = [], voices = new Map();
+      let at = 0, waiting = [], chordOf = null, lastVoice = null;
+      for (const el of [...measure.children]) {
+        const number = sel => +(el.querySelector(sel)?.textContent || 0);
+        const tag = el.tagName;
+        if (tag === 'attributes') {
+          divisions = number('divisions') || divisions;
+          if (el.querySelector('time')) { beats = number('time > beats') || 4; beatType = number('time > beat-type') || 4; }
+        }
+        if (tag === 'backup') at -= number('duration');
+        else if (tag === 'forward') at += number('duration');
+        else if (tag !== 'note') {
+          // what stands ahead of the first note stays there; the rest travels with the next note
+          if (lastVoice) waiting.push({ time: at, els: [el], length: 0 }); else before.push(el);
+        } else if (el.querySelector('chord') && chordOf) chordOf.els.push(el);
+        else {
+          const key = (el.querySelector('voice')?.textContent || '1') + '/' + (el.querySelector('staff')?.textContent || '1');
+          if (!voices.has(key)) voices.set(key, []);
+          lastVoice = voices.get(key);
+          lastVoice.push(...waiting);
+          waiting = [];
+          const length = el.querySelector('grace') ? 0 : number('duration');
+          chordOf = {
+            time: at, els: [el], length, note: el,
+            short: length > 0 && !el.querySelector('rest') && SHORT.has(el.querySelector('type')?.textContent),
+          };
+          lastVoice.push(chordOf);
+          at += length;
+        }
+      }
+      // what is left over closes the measure: its bar line
+      for (const item of waiting) after.push(...item.els);
+      if (!lastVoice) continue;
+
+      // a beat: the dotted quarter in 6/8, 9/8 and 12/8, otherwise the quarter
+      const beat = beatType === 8 && beats % 3 === 0 && beats > 3 ? divisions * 1.5 : divisions;
+      measure.replaceChildren(...before);
+      let cursor = 0, end = 0;
+      const move = to => {
+        if (to === cursor) return;
+        const el = make(to > cursor ? 'forward' : 'backup');
+        el.append(make('duration', Math.abs(to - cursor)));
+        measure.append(el);
+        cursor = to;
+      };
+      for (const items of voices.values()) {
+        let group = [];
+        const close = () => {
+          group.forEach((item, i) => {
+            if (group.length < 2) return;
+            const beam = make('beam', i === 0 ? 'begin' : i === group.length - 1 ? 'end' : 'continue');
+            beam.setAttribute('number', '1');
+            // the schema wants beams ahead of these
+            item.note.insertBefore(beam, item.note.querySelector('notations, lyric, play, listen'));
+          });
+          group = [];
+        };
+        for (const item of items) {
+          move(item.time);
+          measure.append(...item.els);
+          cursor += item.length;
+          end = Math.max(end, cursor);
+          if (!item.note || !item.length) continue;   // a dynamic or a grace note does not break a beam
+          const first = group[0], last = group[group.length - 1];
+          if (!item.short || (first && (Math.floor(first.time / beat) !== Math.floor(item.time / beat) || last.time + last.length !== item.time))) close();
+          if (item.short) group.push(item);
+        }
+        close();
+      }
+      move(end);
+      measure.append(...after);
+    }
+  }
+}
+
+// The recogniser writes its MusicXML on one line: laid out for reading and fixing by hand.
+function pretty(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.querySelector('parsererror')) return text;
+  const escape = v => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const lines = ['<?xml version="1.0" encoding="UTF-8"?>'];
+  const write = (el, indent) => {
+    const attrs = [...el.attributes].map(a => ` ${a.name}="${escape(a.value).replace(/"/g, '&quot;')}"`).join('');
+    const children = [...el.children], value = el.textContent.trim();
+    if (!children.length) lines.push(indent + (value ? `<${el.tagName}${attrs}>${escape(value)}</${el.tagName}>` : `<${el.tagName}${attrs}/>`));
+    else {
+      lines.push(`${indent}<${el.tagName}${attrs}>`);
+      for (const child of children) write(child, indent + '  ');
+      lines.push(`${indent}</${el.tagName}>`);
+    }
+  };
+  write(doc.documentElement, '');
+  return lines.join('\n') + '\n';
+}
+
+// MusicXML gets its beams and the title from the side panel; other formats pass through.
+function prepare(text) {
+  if (!isMusicXml(text)) return text;
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.querySelector('parsererror')) return text;   // Verovio will say what is wrong with it
+  tidy(doc);
+  const title = $('title').value.trim();
+  if (title) {
+    const root = doc.documentElement;
+    for (const el of root.querySelectorAll(':scope > work, :scope > movement-title')) el.remove();
+    const work = doc.createElement('work'), workTitle = doc.createElement('work-title');
+    workTitle.textContent = title;
+    work.append(workTitle);
+    root.prepend(work);
+  }
+  return new XMLSerializer().serializeToString(doc);
+}
+
+function options() {
+  const [w, h] = PAPERS[cfg.paper];
+  // Verovio lays out in tenths of a millimetre at scale 100, where a staff is 7.2 mm high;
+  // a smaller scale on a page made larger by the same factor keeps the paper and shrinks the music.
+  const f = 100 / cfg.size, margin = Math.round(130 * f);
+  return {
+    pageWidth: Math.round(w * 10 * f), pageHeight: Math.round(h * 10 * f), scale: cfg.size,
+    pageMarginLeft: margin, pageMarginRight: margin, pageMarginTop: margin, pageMarginBottom: margin,
+    adjustPageHeight: false, breaks: 'auto', header: 'auto', footer: 'none', svgViewBox: true,
+  };
+}
+
+// Engraves `score` and puts the pages on screen. Returns false if it is not a score.
+function engrave() {
+  stopPlaying();
+  tk.setOptions(options());
+  let ok = false;
+  try { ok = tk.loadData(prepare(score)); } catch (err) { console.error(err); }
+  const count = ok ? tk.getPageCount() : 0;
+  if (!count) {
+    // keep what was on the page: a slip while typing should not blank it
+    say('badScore', '', true, (tk.getLog() || '').trim().split('\n').pop().slice(0, 200));
+    return false;
+  }
+  const pages = $('pages');
+  pages.replaceChildren();
+  for (let i = 1; i <= count; i++) {
+    const page = document.createElement('div');
+    page.className = 'page';
+    page.innerHTML = tk.renderToSVG(i);
+    pages.append(page);
+  }
+  // what to play: every note with its time, from Verovio's own MIDI rendering
+  tk.renderToMIDI();
+  const ids = new Set();
+  for (const event of tk.renderToTimemap()) for (const id of event.on || []) ids.add(id);
+  notes = [];
+  for (const id of ids) {
+    const v = tk.getMIDIValuesForElement(id);
+    if (v && v.duration > 0) notes.push({ id, time: v.time, end: v.time + v.duration, pitch: v.pitch });
+  }
+  notes.sort((a, b) => a.time - b.time);
+  byId = new Map(notes.map(n => [n.id, n]));
+  shown = true;
+  $('empty').hidden = true;
+  for (const id of ['pdf', 'print', 'saveSource', 'midi', 'stop']) $(id).disabled = false;
+  $('play').disabled = !notes.length;
+  return true;
+}
+
+// A new score: from a file, from the recogniser, or typed.
+async function setScore(text) {
+  await engine;
+  score = text;
+  $('text').value = text;
+  if (engrave()) sayShown();
+}
+
+const sayShown = () => say('shown', '', false, '', { p: $('pages').children.length, n: notes.length });
+
+// ---------- the source pane ----------
+
+function showSource(on, tab) {
+  $('source').hidden = !on;
+  $('showSource').classList.toggle('on', on);
+  if (!tab) tab = $('original').src ? 'picture' : 'text';
+  if (tab === 'picture' && !$('original').src) tab = 'text';
+  $('picture').hidden = tab !== 'picture';
+  $('text').hidden = tab !== 'text';
+  $('tabPicture').classList.toggle('on', tab === 'picture');
+  $('tabText').classList.toggle('on', tab === 'text');
+  $('tabPicture').disabled = !$('original').src;
+}
+
+// ---------- recognition ----------
+
+let worker = null, job = 0, started = 0;
+
+function recognise(blob) {
+  if (typeof WebAssembly?.Suspending !== 'function') { say('needsJspi', '', true); return; }
+  if (!worker) {
+    worker = new Worker('omr-worker.mjs', { type: 'module' });
+    worker.onmessage = e => {
+      const m = e.data;
+      if (m.type === 'stage') {
+        if (m.stage === 'download') { $('bar').hidden = false; $('bar').firstElementChild.style.width = m.extra + '%'; }
+        else $('bar').hidden = true;
+        say(m.stage, m.extra ?? '');
+        busy(t(m.stage, m.extra ?? ''));
+      } else if (m.id === job) {
+        $('bar').hidden = true;
+        busy('');
+        if (m.type === 'done') {
+          const seconds = ((performance.now() - started) / 1000).toFixed(0);
+          setScore(pretty(m.xml)).then(() => { if (!status.bad) say('recognised', seconds); });
+        } else {
+          say('omrFailed', '', true, m.message);
+          $('empty').hidden = shown;   // nothing to show: back to the invitation
+        }
+      }
+    };
+    worker.onerror = e => { busy(''); say('omrFailed', '', true, e.message || 'worker'); worker = null; };
+  }
+  (async () => {
+    // Whatever the picture is, the recogniser gets a PNG on white.
+    let bitmap;
+    try { bitmap = await createImageBitmap(blob); } catch { toast(t('badFile'), true); return; }
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width; canvas.height = bitmap.height;
+    const g = canvas.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, canvas.width, canvas.height);
+    g.drawImage(bitmap, 0, 0);
+    const png = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    if ($('original').src) URL.revokeObjectURL($('original').src);
+    $('original').src = URL.createObjectURL(png);
+    showSource(true, 'picture');
+    $('empty').hidden = true;
+    started = performance.now();
+    say('runtime'); busy(t('runtime'));
+    const image = await png.arrayBuffer();
+    worker.postMessage({ id: ++job, image, models: MODELS }, [image]);
+  })();
+}
+
+async function openFile(file) {
+  const lower = file.name.toLowerCase();
+  if (file.type.startsWith('image/')) {
+    name = file.name.replace(/\.[^.]+$/, '') || 'score';
+    recognise(file);
+  } else if (/\.(musicxml|xml|mei|abc)$/.test(lower)) {
+    name = file.name.replace(/\.[^.]+$/, '');
+    setScore(await file.text());
+  } else if (lower.endsWith('.mxl')) {
+    // compressed MusicXML: Verovio unpacks it; the text pane then holds its MEI
+    name = file.name.replace(/\.[^.]+$/, '');
+    await engine;
+    if (tk.loadZipDataBuffer(await file.arrayBuffer())) setScore(tk.getMEI());
+    else say('badScore', '', true, file.name);
+  } else toast(t('badFile'), true);
+}
+
+// ---------- playback ----------
+
+let audio = null;
+const sounds = new Map();      // instrument -> promise of Map(pitch -> base64 MP3)
+const buffers = new Map();     // instrument + pitch -> promise of AudioBuffer
+let playing = null;            // { t0, from, rate, voices, timer, frame, next, lit }
+let position = 0;              // where playback starts from, in score milliseconds
+
+const NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+function loadSound(instrument) {
+  if (!sounds.has(instrument)) {
+    const p = fetch(SOUNDS + instrument + '-mp3.js').then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(js => {
+      const map = new Map();
+      for (const m of js.matchAll(/"([A-G]b?)(-?\d)":\s*"data:audio\/mp3;base64,([^"]+)"/g)) {
+        map.set(NAMES.indexOf(m[1]) + 12 * (+m[2] + 1), m[3]);
+      }
+      return map;
+    });
+    p.catch(() => sounds.delete(instrument));
+    sounds.set(instrument, p);
+  }
+  return sounds.get(instrument);
+}
+
+// Only the pitches the score uses are decoded.
+async function loadBuffers(instrument, pitches) {
+  const map = await loadSound(instrument);
+  await Promise.all([...pitches].map(pitch => {
+    const key = instrument + pitch;
+    if (!buffers.has(key) && map.has(pitch)) {
+      const bytes = Uint8Array.from(atob(map.get(pitch)), c => c.charCodeAt(0));
+      buffers.set(key, audio.decodeAudioData(bytes.buffer).catch(() => null));
+    }
+    return buffers.get(key);
+  }));
+}
+
+function light(id, on) {
+  document.getElementById(id)?.classList.toggle('playing', on);
+}
+
+function stopPlaying(keepPosition) {
+  if (playing) {
+    cancelAnimationFrame(playing.frame);
+    if (keepPosition) position = Math.max(0, playing.from + (audio.currentTime - playing.t0) * 1000 * playing.rate);
+    for (const v of playing.voices) { try { v.gain.gain.cancelScheduledValues(0); v.gain.gain.setTargetAtTime(0, audio.currentTime, .02); v.src.stop(audio.currentTime + .15); } catch {} }
+    for (const id of playing.lit) light(id, false);
+    playing = null;
+  }
+  if (!keepPosition) position = 0;
+  $('play').textContent = t('play');
+}
+
+async function play() {
+  if (playing) { stopPlaying(true); return; }
+  if (!notes.length) return;
+  audio ||= new AudioContext();
+  await audio.resume();
+  const instrument = cfg.instrument;
+  try {
+    if (!sounds.has(instrument)) say('loadingSound', t(instrument === 'acoustic_grand_piano' ? 'piano' : instrument));
+    await loadBuffers(instrument, new Set(notes.map(n => n.pitch)));
+    if (status.key === 'loadingSound') sayShown();
+  } catch (err) {
+    console.error(err);
+    say('soundFailed', '', true);
+    return;
+  }
+  if (playing) return;
+  if (position >= notes[notes.length - 1].end) position = 0;
+  const rate = cfg.tempo / 100, t0 = audio.currentTime + .08, from = position;
+  const piano = instrument === 'acoustic_grand_piano';
+  const voices = [];
+  let first = notes.findIndex(n => n.time >= from - 1);
+  if (first < 0) first = notes.length;
+  for (let i = first; i < notes.length; i++) {
+    const n = notes[i], buffer = await buffers.get(instrument + n.pitch);
+    if (!buffer) continue;
+    const at = t0 + (n.time - from) / 1000 / rate, until = t0 + (n.end - from) / 1000 / rate;
+    const src = audio.createBufferSource(), gain = audio.createGain();
+    src.buffer = buffer;
+    gain.gain.setValueAtTime(piano ? .55 : .4, at);
+    // a piano key lets go slowly, a bow or a breath stops at once
+    gain.gain.setTargetAtTime(0, until, piano ? .12 : .04);
+    src.connect(gain).connect(audio.destination);
+    src.start(at);
+    src.stop(until + (piano ? .8 : .3));
+    voices.push({ src, gain });
+  }
+  playing = { t0, from, rate, voices, next: first, lit: new Set(), frame: 0 };
+  $('play').textContent = t('pause');
+  const tick = () => {
+    if (!playing) return;
+    const now = playing.from + (audio.currentTime - playing.t0) * 1000 * playing.rate;
+    let newest = null;
+    while (playing.next < notes.length && notes[playing.next].time <= now) {
+      const n = notes[playing.next++];
+      playing.lit.add(n.id); light(n.id, true); newest = n.id;
+    }
+    for (const id of playing.lit) {
+      const n = byId.get(id);
+      if (n && n.end <= now) { playing.lit.delete(id); light(id, false); }
+    }
+    if (newest) follow(newest);
+    if (now > notes[notes.length - 1].end + 300) { stopPlaying(); return; }
+    playing.frame = requestAnimationFrame(tick);
+  };
+  playing.frame = requestAnimationFrame(tick);
+}
+
+// Keeps the system that is sounding on screen.
+function follow(id) {
+  const el = document.getElementById(id)?.closest('.system');
+  if (!el) return;
+  const box = el.getBoundingClientRect(), view = $('pages').getBoundingClientRect();
+  if (box.bottom > view.bottom - 20 || box.top < view.top) {
+    $('pages').scrollBy({ top: box.top - view.top - 60, behavior: 'smooth' });
+  }
+}
+
+// ---------- export ----------
+
+const scripts = new Map();
+function loadScript(src) {
+  if (!scripts.has(src)) scripts.set(src, new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = () => { scripts.delete(src); rej(new Error('could not load ' + src)); };
+    document.head.append(s);
+  }));
+  return scripts.get(src);
+}
+
+function download(blob, filename) {
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+// The engraved pages as a vector PDF: Verovio's SVG is drawn into the PDF, not rasterised.
+async function makePdf() {
+  await Promise.all([loadScript(PDFKIT), loadScript(SVG2PDF)]);
+  const [w, h] = PAPERS[cfg.paper].map(mm => mm * 72 / 25.4);
+  const doc = new PDFDocument({ autoFirstPage: false, compress: true, info: { Title: $('title').value.trim() || name } });
+  const chunks = [];
+  doc.on('data', c => chunks.push(c));
+  const ended = new Promise(res => doc.on('end', res));
+  tk.setOptions(options());
+  for (let i = 1; i <= tk.getPageCount(); i++) {
+    doc.addPage({ size: [w, h], margin: 0 });
+    SVGtoPDF(doc, tk.renderToSVG(i), 0, 0, { width: w, height: h, preserveAspectRatio: 'xMinYMin meet' });
+  }
+  doc.end();
+  await ended;
+  return new Blob(chunks, { type: 'application/pdf' });
+}
+
+async function withPdf(use) {
+  if (!shown || $('stage').classList.contains('busy')) return;
+  busy(t('makingPdf'));
+  try { await use(await makePdf()); }
+  catch (err) { console.error(err); toast(t('pdfFailed') + (err?.message || err), true); }
+  busy('');
+}
+
+const savePdf = () => withPdf(blob => download(blob, name + '.pdf'));
+
+// Straight to the print dialog: the PDF is loaded into a hidden frame, whose viewer prints it.
+let printUrl = '';
+const printPdf = () => withPdf(blob => new Promise(done => {
+  $('printFrame')?.remove();
+  if (printUrl) URL.revokeObjectURL(printUrl);
+  const url = printUrl = URL.createObjectURL(blob);
+  const frame = document.createElement('iframe');
+  frame.id = 'printFrame';
+  frame.onload = () => setTimeout(() => {
+    try { frame.contentWindow.focus(); frame.contentWindow.print(); }
+    catch (err) { console.error(err); window.open(url, '_blank'); toast(t('printOpened'), true); }
+    done();
+  }, 400);
+  frame.src = url;
+  document.body.append(frame);
+}));
+
+function saveSource() {
+  if (!shown) return;
+  const ext = isMusicXml(score) ? 'musicxml' : isXml(score) ? 'mei' : 'abc';
+  // MusicXML is saved as engraved, with its beams and title
+  download(new Blob([prepare(score)], { type: 'text/plain' }), `${name}.${ext}`);
+}
+
+function saveMidi() {
+  if (!shown) return;
+  const bytes = Uint8Array.from(atob(tk.renderToMIDI()), c => c.charCodeAt(0));
+  download(new Blob([bytes], { type: 'audio/midi' }), name + '.mid');
+}
+
+// ---------- settings and events ----------
+
+function showSettings() {
+  $('instrument').value = cfg.instrument;
+  $('tempo').value = cfg.tempo; $('tempoValue').textContent = cfg.tempo + '%';
+  $('paper').value = cfg.paper;
+  $('size').value = cfg.size; $('sizeValue').textContent = cfg.size + '%';
+}
+function saveSettings() {
+  try { localStorage.setItem('score-settings', JSON.stringify(cfg)); } catch {}
+  showSettings();
+}
+
+function applyLang() {
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  document.title = t('title');
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  for (const el of document.querySelectorAll('[data-i18n-placeholder]')) el.placeholder = t(el.dataset.i18nPlaceholder);
+  $('lang').textContent = t('other');
+  $('play').textContent = t(playing ? 'pause' : 'play');
+  say(status.key, status.x, status.bad, status.tail, status.more);
+}
+
+let typing = 0, relayout = 0;
+$('text').oninput = () => {
+  clearTimeout(typing);
+  typing = setTimeout(() => {
+    score = $('text').value;
+    if (engrave()) sayShown();
+  }, 500);
+};
+const later = () => {
+  clearTimeout(relayout);
+  relayout = setTimeout(() => { if (shown && engrave()) sayShown(); }, 250);
+};
+$('title').oninput = later;
+$('paper').onchange = e => { cfg.paper = e.target.value; saveSettings(); later(); };
+$('size').oninput = e => { cfg.size = +e.target.value; saveSettings(); later(); };
+$('tempo').oninput = e => {
+  cfg.tempo = +e.target.value; saveSettings();
+  if (playing) { stopPlaying(true); play(); }   // carry on at the new speed
+};
+$('instrument').onchange = e => {
+  cfg.instrument = e.target.value; saveSettings();
+  if (playing) { stopPlaying(true); play(); }
+};
+$('play').onclick = play;
+$('stop').onclick = () => stopPlaying();
+$('pdf').onclick = savePdf;
+$('print').onclick = printPdf;
+$('saveSource').onclick = saveSource;
+$('midi').onclick = saveMidi;
+$('showSource').onclick = () => showSource($('source').hidden);
+$('tabPicture').onclick = () => showSource(true, 'picture');
+$('tabText').onclick = () => showSource(true, 'text');
+$('open').onclick = $('empty').onclick = () => $('file').click();
+$('file').onchange = e => { if (e.target.files[0]) openFile(e.target.files[0]); e.target.value = ''; };
+$('lang').onclick = () => {
+  lang = lang === 'en' ? 'zh' : 'en';
+  try { localStorage.setItem('score-lang', lang); } catch {}
+  applyLang();
+};
+
+// a click on a note starts playback there
+$('pages').onclick = e => {
+  const el = e.target.closest?.('.note, .rest, .chord');
+  // a chord is one element around its notes
+  const n = el && (byId.get(el.id) || notes.find(x => el.querySelector('#' + CSS.escape(x.id))));
+  if (!n) return;
+  stopPlaying();
+  position = n.time;
+  play();
+};
+
+const inField = () => /^(TEXTAREA|INPUT|SELECT)$/.test(document.activeElement?.tagName || '');
+
+addEventListener('paste', e => {
+  if (inField()) return;
+  const image = [...e.clipboardData.files].find(f => f.type.startsWith('image/'));
+  const text = e.clipboardData.getData('text/plain');
+  if (image) { e.preventDefault(); name = 'score'; recognise(image); }
+  // score text pasted onto the page: MusicXML, MEI or ABC
+  else if (/^\s*(<\?xml|<score-|<mei|X:\s*\d)/.test(text)) { e.preventDefault(); name = 'score'; setScore(text); }
+  else toast(t('nothing'), true);
+});
+
+addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragging'); });
+addEventListener('dragleave', () => document.body.classList.remove('dragging'));
+addEventListener('drop', e => {
+  e.preventDefault();
+  document.body.classList.remove('dragging');
+  if (e.dataTransfer.files[0]) openFile(e.dataTransfer.files[0]);
+});
+
+addEventListener('keydown', e => {
+  const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if (mod && k === 's') { e.preventDefault(); savePdf(); }
+  else if (mod && k === 'p' && shown) { e.preventDefault(); printPdf(); }
+  else if (k === ' ' && !mod && !inField() && shown) { e.preventDefault(); play(); }
+});
+
+showSettings();
+showSource(false);
+applyLang();
+engine.then(() => { if (status.key === 'engine') say('ready'); }, err => { console.error(err); say('engineFailed', '', true); });
+
+// for trying things out from the console
+window.scoreReader = { setScore, recognise, makePdf, pretty, get notes() { return notes; }, get status() { return status; } };
+</script>
+</body>
+</html>
