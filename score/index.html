@@ -87,7 +87,7 @@
   #stage { flex: 1; position: relative; min-width: 0; }
   #pages { position: absolute; inset: 0; overflow: auto; padding: 20px; }
   #pages .page {
-    max-width: 900px; margin: 0 auto 20px; background: #fff; color: #000;
+    position: relative; max-width: 900px; margin: 0 auto 20px; background: #fff; color: #000;
     box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
   }
   #pages .page svg { display: block; width: 100%; height: auto; }
@@ -98,6 +98,19 @@
   #pages .played2, #pages .played2 * { fill: #8a4fc7; stroke: #8a4fc7; }
   #pages .selected, #pages .selected * { fill: #0e9a55; stroke: #0e9a55; }
   #pages .playing, #pages .playing * { fill: #d5382a; stroke: #d5382a; }
+  /* Title, subtitle and names are edited where they stand: a click on one opens a field over it. */
+  #pages .pgHead text { cursor: text; pointer-events: bounding-box; }
+  #pages .pgHead text:hover { fill: #1772d0; }
+  #headAdd { position: absolute; left: 1.5%; top: 1%; display: flex; gap: 6px; }
+  #headAdd button {
+    padding: 1px 8px; border: 1px dashed #b5b5b5; border-radius: 10px; background: none; color: #8a8a8a; font-size: 12px;
+  }
+  #headAdd button:hover { background: #eef4fb; border-color: #1772d0; color: #1772d0; }
+  #headEdit {
+    position: absolute; z-index: 5; margin: 0; padding: 2px 6px; border: 1.5px solid #1772d0; border-radius: 4px; outline: 0;
+    background: #fff; color: #000; font-family: "Times New Roman", "Noto Serif CJK SC", serif; line-height: 1.25;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .2); resize: none; user-select: text;
+  }
   /* the line that shows where playback is */
   #cursor {
     position: absolute; width: 2px; margin-left: -1px; border-radius: 1px;
@@ -488,6 +501,7 @@ const TEXT = {
     repStart: '‖: Start repeat', repEnd: 'End repeat :‖',
     repHint: 'Repeat signs of the measure the picked note is in: on its left and on its right barline. Press again to take one away.',
     noteHint: '♭ ♮ ♯ set the accidental; −½ +½ move by a semitone (↓ ↑), −1 +1 by a whole tone (Shift). Ctrl+Z undoes.',
+    headEditHint: 'Enter keeps it, Esc leaves it as it was', composerEditHint: 'One name per line · Ctrl+Enter keeps it, Esc leaves it as it was',
     titleHint: 'Title', subtitleHint: 'Subtitle', composerHint: 'Composer, arranger (one per line)',
     paper: 'Paper', size: 'Staff size', lines: 'Same lines as the original',
     pdf: 'Save PDF', print: 'Print', saveSource: 'Save source', midi: 'Save MIDI',
@@ -524,6 +538,7 @@ const TEXT = {
     repStart: '‖: 从这里反复', repEnd: '反复到这里 :‖',
     repHint: '选中音符所在小节的反复记号：左边小节线和右边小节线。再按一次即取消。识别标反了时，取消错的、点上对的。',
     noteHint: '♭ ♮ ♯ 设置升降号；−半 +半 移动半音（↓ ↑），−全 +全 移动全音（Shift）。Ctrl+Z 撤销。',
+    headEditHint: '回车确认，Esc 取消', composerEditHint: '每行一位 · Ctrl+回车确认，Esc 取消',
     titleHint: '标题', subtitleHint: '副标题', composerHint: '作曲、编曲（每行一位）',
     paper: '纸张', size: '谱表大小', lines: '每行的小节与原谱一致',
     pdf: '保存 PDF', print: '打印', saveSource: '保存源文件', midi: '保存 MIDI',
@@ -567,6 +582,7 @@ let position = 0;       // where playback is, or will start from
 let selected = null;    // id of the note picked for editing
 const history = [];     // earlier texts of the score, for undo
 let toastTimer = 0;
+let relayout = 0;       // the timer of an engraving that is waiting for typing to stop
 
 function say(key, x = '', bad = false, tail = '', more = {}) {
   status = { key, x, more, bad, tail };
@@ -809,6 +825,7 @@ function engrave() {
     page.innerHTML = tk.renderToSVG(i);
     pages.append(page);
   }
+  showHeadAdd();
   const cursor = document.createElement('div');
   cursor.id = 'cursor'; cursor.hidden = true;
   cursor.append(document.createElement('b'));
@@ -1173,6 +1190,83 @@ function toggleRepeat(side) {
   if (engrave()) sayShown();
 }
 
+// ---------- the heading, edited on the page ----------
+
+// On the first page, one small button for each of title, subtitle and names that is still empty.
+function showHeadAdd() {
+  const page = $('pages').querySelector('.page');
+  if (!page) return;
+  const box = document.createElement('div');
+  box.id = 'headAdd';
+  for (const field of ['title', 'subtitle', 'composer']) {
+    if ($(field).value.trim()) continue;
+    const b = document.createElement('button');
+    b.textContent = '+ ' + t(field + 'Hint').split(/[,，（(]/)[0];
+    b.onclick = () => editHead(field);
+    box.append(b);
+  }
+  if (box.children.length) page.append(box);
+}
+
+// Opens a field over the heading of the first page. `over` is the text on the page that was
+// clicked; without it the field goes where that part of the heading would be.
+function editHead(field, over) {
+  const page = $('pages').querySelector('.page');
+  if (!page) return;
+  $('headEdit')?.remove();
+  const frame = page.getBoundingClientRect(), W = frame.width, lines = field === 'composer';
+  const el = document.createElement(lines ? 'textarea' : 'input');
+  el.id = 'headEdit';
+  el.value = $(field).value || (over && !lines ? over.textContent.trim() : '');
+  el.title = t(lines ? 'composerEditHint' : 'headEditHint');
+  el.placeholder = t(field + 'Hint');
+  // as large as the text it stands over, or as that part of a heading usually is
+  let size = W * { title: .03, subtitle: .021, composer: .017 }[field], top = W * { title: .04, subtitle: .085, composer: .11 }[field];
+  if (over) {
+    const r = over.getBoundingClientRect(), n = lines ? Math.max(1, $(field).value.split('\n').filter(v => v.trim()).length) : 1;
+    if (r.height > 4) { size = Math.max(11, r.height / n * .78); top = r.top - frame.top - 4; }
+  }
+  el.style.fontSize = size + 'px';
+  el.style.top = top + 'px';
+  if (lines) { el.rows = Math.max(2, el.value.split('\n').length + 1); el.style.right = '4%'; el.style.width = '42%'; el.style.textAlign = 'right'; }
+  else { el.style.left = '12%'; el.style.width = '76%'; el.style.textAlign = 'center'; }
+  let over_ = false;
+  const finish = keep => {
+    if (over_) return;
+    over_ = true;
+    const value = el.value.trim();
+    el.remove();
+    if (!keep || value === $(field).value.trim()) return;
+    $(field).value = value;
+    clearTimeout(relayout);
+    if (engrave()) sayShown();
+  };
+  el.onkeydown = e => {
+    e.stopPropagation();
+    if (e.key === 'Escape') finish(false);
+    else if (e.key === 'Enter' && (!lines || e.ctrlKey || e.metaKey)) { e.preventDefault(); finish(true); }
+  };
+  el.onblur = () => finish(true);
+  el.onclick = e => e.stopPropagation();
+  page.append(el);
+  el.focus();
+  el.select();
+}
+
+const headKnown = el => { const said = el.textContent.replace(/\s+/g, ' ').trim(), h = heading(); return [h.title, h.subtitle, ...h.composer].some(v => v && v.replace(/\s+/g, ' ') === said); };
+
+// Which part of the heading a piece of text on the page is.
+function headField(text) {
+  const said = text.textContent.replace(/\s+/g, ' ').trim(), { title, subtitle, composer } = heading();
+  const same = v => v && said === v.replace(/\s+/g, ' ');
+  if (same(title)) return 'title';
+  if (same(subtitle)) return 'subtitle';
+  if (composer.some(same)) return 'composer';
+  // a heading that came with the file: by where it stands
+  const r = text.getBoundingClientRect(), page = text.closest('.page').getBoundingClientRect();
+  return (r.left + r.right) / 2 > page.left + page.width * .68 ? 'composer' : 'title';
+}
+
 function undo() {
   if (!history.length) return;
   score = history.pop();
@@ -1515,7 +1609,7 @@ function applyLang() {
   showPicked();
 }
 
-let typing = 0, relayout = 0;
+let typing = 0;
 $('text').oninput = () => {
   clearTimeout(typing);
   typing = setTimeout(() => {
@@ -1570,6 +1664,15 @@ $('lang').onclick = () => {
 
 // A click on a note picks it: playback is moved there, and the note can be changed.
 $('pages').onclick = e => {
+  const head = e.target.closest?.('.pgHead') && e.target.closest('tspan, text');
+  if (head) {
+    // the line that was clicked: the innermost piece of text may be only a part of it
+    let line = head;
+    while (line.parentElement?.closest('tspan') && !headKnown(line)) line = line.parentElement.closest('tspan');
+    const field = headField(headKnown(line) ? line : head);
+    editHead(field, field === 'composer' ? head.closest('text') : line);
+    return;
+  }
   const el = e.target.closest?.('.note');
   if (!el) return;
   const first = events.find(x => x.id === el.id);
@@ -1623,7 +1726,7 @@ engine.then(() => { if (status.key === 'engine') say('ready'); }, err => { conso
 
 // for trying things out from the console
 window.scoreReader = {
-  setScore, recognise, makePdf, readHeader, change, toggleRepeat, play,
+  setScore, recognise, makePdf, readHeader, change, toggleRepeat, editHead, play,
   get events() { return events; }, get status() { return status; }, get position() { return now(); }, get score() { return score; },
 };
 </script>
