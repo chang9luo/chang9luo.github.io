@@ -365,6 +365,11 @@
       <button id="up2" disabled data-i18n="up2"></button>
     </div>
     <div class="note-text" data-i18n="noteHint"></div>
+    <div class="row">
+      <button id="repStart" disabled data-i18n="repStart"></button>
+      <button id="repEnd" disabled data-i18n="repEnd"></button>
+    </div>
+    <div class="note-text" data-i18n="repHint"></div>
 
     <h2 data-i18n="layoutTitle"></h2>
     <input type="text" id="title" data-i18n-placeholder="titleHint">
@@ -480,6 +485,8 @@ const TEXT = {
     noNote: 'Click a note: playback starts there, and it can be changed.',
     notEditable: 'Notes can be changed in MusicXML scores only.',
     down2: '−1', down1: '−½', up1: '+½', up2: '+1',
+    repStart: '‖: Start repeat', repEnd: 'End repeat :‖',
+    repHint: 'Repeat signs of the measure the picked note is in: on its left and on its right barline. Press again to take one away.',
     noteHint: '♭ ♮ ♯ set the accidental; −½ +½ move by a semitone (↓ ↑), −1 +1 by a whole tone (Shift). Ctrl+Z undoes.',
     titleHint: 'Title', subtitleHint: 'Subtitle', composerHint: 'Composer, arranger (one per line)',
     paper: 'Paper', size: 'Staff size', lines: 'Same lines as the original',
@@ -514,6 +521,8 @@ const TEXT = {
     noNote: '点击一个音符：从那里开始播放，也可以修改它。',
     notEditable: '只有 MusicXML 乐谱可以修改音符。',
     down2: '−全', down1: '−半', up1: '+半', up2: '+全',
+    repStart: '‖: 从这里反复', repEnd: '反复到这里 :‖',
+    repHint: '选中音符所在小节的反复记号：左边小节线和右边小节线。再按一次即取消。识别标反了时，取消错的、点上对的。',
     noteHint: '♭ ♮ ♯ 设置升降号；−半 +半 移动半音（↓ ↑），−全 +全 移动全音（Shift）。Ctrl+Z 撤销。',
     titleHint: '标题', subtitleHint: '副标题', composerHint: '作曲、编曲（每行一位）',
     paper: '纸张', size: '谱表大小', lines: '每行的小节与原谱一致',
@@ -1118,6 +1127,52 @@ function change(how) {
   blip(12 * (octave + 1) + STEPS[step] + alter);
 }
 
+// The repeat sign on one side of a measure: the one written there, if any.
+const SIDES = { left: { style: 'heavy-light', direction: 'forward' }, right: { style: 'light-heavy', direction: 'backward' } };
+function repeatAt(measure, side) {
+  for (const bar of measure.querySelectorAll(':scope > barline')) {
+    if ((bar.getAttribute('location') || 'right') === side && bar.querySelector('repeat')) return bar;
+  }
+  return null;
+}
+
+// Puts a repeat sign on that side of the picked note's measure, or takes it away: recognition
+// mistakes the two kinds for each other. In every part, as a repeat is for all of them.
+function toggleRepeat(side) {
+  const doc = parse(score), el = pickedNote(doc);
+  if (!el) { if (selected) toast(t('notEditable'), true); return; }
+  const picked = el.closest('measure'), index = [...picked.parentElement.children].filter(m => m.tagName === 'measure').indexOf(picked);
+  const on = !repeatAt(picked, side), { style, direction } = SIDES[side];
+  for (const part of doc.querySelectorAll('part')) {
+    const measure = [...part.children].filter(m => m.tagName === 'measure')[index];
+    if (!measure) continue;
+    const old = repeatAt(measure, side);
+    if (old) {
+      // a barline that also carries a volta bracket stays, without its repeat
+      if (old.querySelector('ending')) { old.querySelector('repeat').remove(); old.querySelector('bar-style')?.remove(); }
+      else old.remove();
+    }
+    if (!on) continue;
+    let bar = [...measure.querySelectorAll(':scope > barline')].find(b => (b.getAttribute('location') || 'right') === side);
+    if (!bar) {
+      bar = doc.createElement('barline');
+      bar.setAttribute('location', side);
+      if (side === 'left') measure.prepend(bar); else measure.append(bar);
+    }
+    bar.querySelector('bar-style')?.remove();
+    bar.querySelector('repeat')?.remove();
+    const s = doc.createElement('bar-style'); s.textContent = style;
+    const r = doc.createElement('repeat'); r.setAttribute('direction', direction);
+    bar.prepend(s);    // the order MusicXML asks for: style first, the repeat last
+    bar.append(r);
+  }
+  history.push(score);
+  if (history.length > 200) history.shift();
+  score = pretty(doc);
+  $('text').value = score;
+  if (engrave()) sayShown();
+}
+
 function undo() {
   if (!history.length) return;
   score = history.pop();
@@ -1132,7 +1187,9 @@ function showPicked() {
   const el = selected && isMusicXml(score) ? pickedNote(parse(score)) : null;
   if (el) { const p = readPitch(el); $('picked').textContent = p.step + SHOWN[p.alter] + p.octave; }
   else $('picked').textContent = t(selected && !isMusicXml(score) ? 'notEditable' : 'noNote');
-  for (const id of ['flat', 'natural', 'sharp', 'down2', 'down1', 'up1', 'up2']) $(id).disabled = !el;
+  for (const id of ['flat', 'natural', 'sharp', 'down2', 'down1', 'up1', 'up2', 'repStart', 'repEnd']) $(id).disabled = !el;
+  $('repStart').classList.toggle('on', !!el && !!repeatAt(el.closest('measure'), 'left'));
+  $('repEnd').classList.toggle('on', !!el && !!repeatAt(el.closest('measure'), 'right'));
 }
 
 // ---------- playback ----------
@@ -1491,6 +1548,8 @@ $('down2').onclick = () => change({ by: -2 });
 $('down1').onclick = () => change({ by: -1 });
 $('up1').onclick = () => change({ by: 1 });
 $('up2').onclick = () => change({ by: 2 });
+$('repStart').onclick = () => toggleRepeat('left');
+$('repEnd').onclick = () => toggleRepeat('right');
 // the metronome opens at the tempo the score is played at
 $('metronome').onclick = () => { const bpm = +$('bpm').value; window.metro?.toggle(bpm ? bpm * cfg.tempo / 100 : 0); };
 addEventListener('metro', e => $('metronome').classList.toggle('on', e.detail));
@@ -1564,7 +1623,7 @@ engine.then(() => { if (status.key === 'engine') say('ready'); }, err => { conso
 
 // for trying things out from the console
 window.scoreReader = {
-  setScore, recognise, makePdf, readHeader, change, play,
+  setScore, recognise, makePdf, readHeader, change, toggleRepeat, play,
   get events() { return events; }, get status() { return status; }, get position() { return now(); }, get score() { return score; },
 };
 </script>
